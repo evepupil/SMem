@@ -85,6 +85,7 @@ func Init(layout workspace.Layout, opts Options, out io.Writer) error {
 	}
 	if opts.DryRun {
 		fmt.Fprintln(out, "预览结束，未写入任何文件。")
+		printGeneralUsage(out)
 		return nil
 	}
 	for _, store := range stores {
@@ -110,7 +111,13 @@ func Init(layout workspace.Layout, opts Options, out io.Writer) error {
 		fmt.Fprintln(out, "当前没有独立的 Git 项目，只接入全局记忆；需要项目说明时，请进入仓库再运行 mem init。")
 	}
 	fmt.Fprintln(out, "已就绪。新开 Agent 会话使用；迁移旧记忆请运行 mem migrate。")
+	printGeneralUsage(out)
 	return nil
+}
+
+func printGeneralUsage(out io.Writer) {
+	fmt.Fprintln(out, "可复制的通用用法：")
+	fmt.Fprintln(out, rule)
 }
 
 func sameDirectory(left, right string) bool {

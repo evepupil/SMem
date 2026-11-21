@@ -1,0 +1,39 @@
+{
+  "mode": "lifecycle",
+  "model": "custom/gpt-6-luna",
+  "corpus_sha256": "3dc40870ce87b59f4511ba0399dc86998f1c8dca304e7e19cbaf28505bf25406",
+  "result": {
+    "correction": "ok",
+    "changed_in_place": false,
+    "browse": "ok",
+    "listed_current": false,
+    "deletion": "ok",
+    "single_forgotten": true,
+    "reopen": "ok",
+    "no_forgotten_name": true,
+    "other_project": "ok",
+    "no_cross_project_name": true,
+    "operations": {
+      "change": [
+        "search",
+        "update"
+      ],
+      "inspect": [
+        "search",
+        "show"
+      ],
+      "forget": [
+        "search",
+        "show",
+        "forget"
+      ],
+      "verify": [
+        "search"
+      ],
+      "other": [
+        "search",
+        "search"
+      ]
+    }
+  }
+}

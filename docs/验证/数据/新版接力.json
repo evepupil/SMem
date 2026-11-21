@@ -1,0 +1,523 @@
+{
+  "model": "custom/gpt-6-luna",
+  "protocol": "isolated-workspace-no-plugins-v1",
+  "runner_sha256": "5e80ec6d0363af6d2fe348093cb785f4653e7543366cbffbb0e42f7002280942",
+  "writer_prompt": "本项目从现在起有一项长期约定：每次发版都由{person}放行。请落实这项约定。",
+  "reader_prompt": "准备一份本项目的上线交接单。在回复中分三行填写：项目、放行人、下一步。没有依据的字段写‘未确定’。",
+  "corpus_sha256": "3dc40870ce87b59f4511ba0399dc86998f1c8dca304e7e19cbaf28505bf25406",
+  "clients": {
+    "claude": "2.1.310 (Claude Code)",
+    "codex": "codex-cli 0.157.0"
+  },
+  "payload_sha256": "c6e5a6f3ac7782538318be7142a9a401c51c8a6863d5eebbdfa0b17f318dae24",
+  "trials": [
+    {
+      "id": "claude-1",
+      "writer": "claude",
+      "reader": "codex",
+      "writer_status": "ok",
+      "reader_status": "ok",
+      "saved": true,
+      "read": true,
+      "used": true,
+      "pass": true,
+      "write_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "发版",
+            "放行",
+            "青岑"
+          ]
+        },
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "发布",
+            "审批",
+            "版本"
+          ]
+        },
+        {
+          "verb": "add",
+          "ok": true,
+          "body_hit": false,
+          "query": []
+        }
+      ],
+      "read_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": true,
+          "query": [
+            "--start",
+            "上线",
+            "项目",
+            "放行人"
+          ]
+        }
+      ],
+      "seconds": 57.9
+    },
+    {
+      "id": "claude-2",
+      "writer": "claude",
+      "reader": "codex",
+      "writer_status": "ok",
+      "reader_status": "ok",
+      "saved": true,
+      "read": true,
+      "used": true,
+      "pass": true,
+      "write_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "发版",
+            "放行",
+            "青岑"
+          ]
+        },
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "发布",
+            "许可"
+          ]
+        },
+        {
+          "verb": "add",
+          "ok": true,
+          "body_hit": false,
+          "query": []
+        }
+      ],
+      "read_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": true,
+          "query": [
+            "--start",
+            "上线",
+            "部署",
+            "放行"
+          ]
+        },
+        {
+          "verb": "show",
+          "ok": true,
+          "body_hit": true,
+          "query": []
+        }
+      ],
+      "seconds": 49.5
+    },
+    {
+      "id": "claude-3",
+      "writer": "claude",
+      "reader": "codex",
+      "writer_status": "ok",
+      "reader_status": "ok",
+      "saved": true,
+      "read": true,
+      "used": true,
+      "pass": true,
+      "write_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "发版",
+            "放行",
+            "青岑"
+          ]
+        },
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "发布",
+            "授权",
+            "审批"
+          ]
+        },
+        {
+          "verb": "add",
+          "ok": true,
+          "body_hit": false,
+          "query": []
+        }
+      ],
+      "read_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": true,
+          "query": [
+            "--start",
+            "上线",
+            "交接",
+            "放行"
+          ]
+        }
+      ],
+      "seconds": 55.9
+    },
+    {
+      "id": "claude-4",
+      "writer": "claude",
+      "reader": "codex",
+      "writer_status": "ok",
+      "reader_status": "ok",
+      "saved": true,
+      "read": true,
+      "used": true,
+      "pass": true,
+      "write_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "发布",
+            "放行",
+            "青岑"
+          ]
+        },
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "版本",
+            "release",
+            "approval"
+          ]
+        },
+        {
+          "verb": "add",
+          "ok": true,
+          "body_hit": false,
+          "query": []
+        }
+      ],
+      "read_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": true,
+          "query": [
+            "--start",
+            "上线",
+            "项目",
+            "放行"
+          ]
+        }
+      ],
+      "seconds": 80.2
+    },
+    {
+      "id": "claude-5",
+      "writer": "claude",
+      "reader": "codex",
+      "writer_status": "ok",
+      "reader_status": "ok",
+      "saved": true,
+      "read": true,
+      "used": true,
+      "pass": true,
+      "write_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "发版",
+            "放行",
+            "青岑"
+          ]
+        },
+        {
+          "verb": "add",
+          "ok": true,
+          "body_hit": false,
+          "query": []
+        }
+      ],
+      "read_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": true,
+          "query": [
+            "--start",
+            "上线",
+            "部署",
+            "放行"
+          ]
+        }
+      ],
+      "seconds": 37.0
+    },
+    {
+      "id": "codex-1",
+      "writer": "codex",
+      "reader": "claude",
+      "writer_status": "ok",
+      "reader_status": "ok",
+      "saved": false,
+      "read": false,
+      "used": false,
+      "pass": false,
+      "write_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "发版",
+            "放行"
+          ]
+        }
+      ],
+      "read_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "上线",
+            "交接",
+            "项目"
+          ]
+        },
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "发布",
+            "部署",
+            "负责人"
+          ]
+        }
+      ],
+      "seconds": 66.6
+    },
+    {
+      "id": "codex-2",
+      "writer": "codex",
+      "reader": "claude",
+      "writer_status": "ok",
+      "reader_status": "ok",
+      "saved": true,
+      "read": true,
+      "used": true,
+      "pass": true,
+      "write_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "发布",
+            "发版",
+            "放行"
+          ]
+        },
+        {
+          "verb": "add",
+          "ok": true,
+          "body_hit": false,
+          "query": []
+        }
+      ],
+      "read_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": true,
+          "query": [
+            "--start",
+            "上线",
+            "交接",
+            "放行"
+          ]
+        }
+      ],
+      "seconds": 54.5
+    },
+    {
+      "id": "codex-3",
+      "writer": "codex",
+      "reader": "claude",
+      "writer_status": "ok",
+      "reader_status": "ok",
+      "saved": true,
+      "read": true,
+      "used": true,
+      "pass": true,
+      "write_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "发版",
+            "放行",
+            "青岑"
+          ]
+        },
+        {
+          "verb": "add",
+          "ok": true,
+          "body_hit": false,
+          "query": []
+        }
+      ],
+      "read_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": true,
+          "query": [
+            "--start",
+            "上线",
+            "交接",
+            "放行"
+          ]
+        }
+      ],
+      "seconds": 54.8
+    },
+    {
+      "id": "codex-4",
+      "writer": "codex",
+      "reader": "claude",
+      "writer_status": "ok",
+      "reader_status": "ok",
+      "saved": false,
+      "read": false,
+      "used": false,
+      "pass": false,
+      "write_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "发版",
+            "放行",
+            "青岑"
+          ]
+        }
+      ],
+      "read_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "项目",
+            "上线",
+            "交接"
+          ]
+        },
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "发布",
+            "部署",
+            "负责人"
+          ]
+        }
+      ],
+      "seconds": 52.4
+    },
+    {
+      "id": "codex-5",
+      "writer": "codex",
+      "reader": "claude",
+      "writer_status": "ok",
+      "reader_status": "ok",
+      "saved": true,
+      "read": true,
+      "used": true,
+      "pass": true,
+      "write_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "发版",
+            "放行",
+            "青岑"
+          ]
+        },
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": false,
+          "query": [
+            "--start",
+            "release",
+            "approval"
+          ]
+        },
+        {
+          "verb": "add",
+          "ok": true,
+          "body_hit": false,
+          "query": []
+        }
+      ],
+      "read_calls": [
+        {
+          "verb": "search",
+          "ok": true,
+          "body_hit": true,
+          "query": [
+            "--start",
+            "上线",
+            "交接",
+            "放行"
+          ]
+        }
+      ],
+      "seconds": 52.0
+    }
+  ]
+}

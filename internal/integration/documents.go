@@ -14,7 +14,7 @@ import (
 
 const start = "<!-- smem:start -->"
 const end = "<!-- smem:end -->"
-const rule = "开工先用 `mem search 关键词` 查相关记忆；得出可复用的持久结论，先用 `mem add \"结论\"` 记到本项目，跨项目的个人偏好用 `mem add --global \"偏好\"`。不要记录密钥或聊天原文。"
+const rule = "开工先实际运行 `mem search --start 关键词`，选两三个实词；未命中再换个说法查一次。用户明确说“以后”“每次”或交代长期约定，就已授权保存：当场运行 `mem add \"结论\"`，成功再回复，无需改项目配置或再问确认。仅跨项目偏好加 `--global`，明确要求开工提醒才加 `--always`。要翻看用 `mem list`、`mem show 引用`。纠正先查原文，再用 `mem update 引用 \"仅新的现行结论\"`；核对回显，不把旧值或更换经过留在正文，历史交给 Git。忘掉用 `mem forget 引用`。没有成功回执就说明未完成；不要记凭证和聊天原文。"
 
 type document struct {
 	target     workspace.Target

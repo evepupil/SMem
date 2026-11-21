@@ -6,10 +6,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"strings"
 
 	"smem/internal/integration"
-	"smem/internal/memory"
 	"smem/internal/workspace"
 )
 
@@ -18,8 +16,12 @@ var migration string
 
 const usage = `smem：所有本地编程助手共用一份记忆
   mem init [--dry-run] [--agents claude,codex,cursor,gemini,copilot,opencode,windsurf,devin]
-  mem search 关键词 [关键词...]
-  mem add [--global] "一条持久结论"
+  mem list [--scope all|project|global] [--offset 0] [--limit 10]
+  mem show REF
+  mem update REF "新结论"
+  mem forget REF
+  mem search [--start] 关键词 [关键词...]
+  mem add [--always] [--global] "一条持久结论"
   mem migrate  打印可贴给旧助手的迁移提示词，不读取旧记忆
 `
 
@@ -45,35 +47,17 @@ func Run(args []string, layout workspace.Layout, out, errOut io.Writer) error {
 		}
 		return integration.Init(layout, integration.Options{Agents: *agents, DryRun: *dryRun}, out)
 	case "add":
-		flags := flag.NewFlagSet("mem add", flag.ContinueOnError)
-		flags.SetOutput(errOut)
-		global := flags.Bool("global", false, "仅跨项目的个人偏好")
-		if err := flags.Parse(args[1:]); err != nil {
-			return err
-		}
-		path, created, err := memory.Add(layout, *global, strings.Join(flags.Args(), " "))
-		if err != nil {
-			return err
-		}
-		if created {
-			fmt.Fprintf(out, "已记下：%s\n", path)
-		} else {
-			fmt.Fprintf(out, "已存在：%s\n", path)
-		}
-		return nil
+		return runAdd(args[1:], layout, out, errOut)
 	case "search":
-		hits, err := memory.Search(layout, strings.Join(args[1:], " "))
-		if err != nil {
-			return err
-		}
-		if len(hits) == 0 {
-			fmt.Fprintln(out, "没有找到相关记忆。")
-			return nil
-		}
-		for _, hit := range hits {
-			fmt.Fprintf(out, "[%s] %s:%d\n%s\n", hit.Scope, hit.Path, hit.Line, hit.Text)
-		}
-		return nil
+		return runSearch(args[1:], layout, out)
+	case "list":
+		return runList(args[1:], layout, out, errOut)
+	case "show":
+		return runShow(args[1:], layout, out)
+	case "update":
+		return runUpdate(args[1:], layout, out)
+	case "forget":
+		return runForget(args[1:], layout, out)
 	case "migrate":
 		if len(args) != 1 {
 			return errors.New("用法：mem migrate（只打印提示词）")
