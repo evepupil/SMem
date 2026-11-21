@@ -38,7 +38,7 @@ mem migrate
 
 ## 调研、设计与验证
 
-[八类助手的原生记忆对照](docs/调研/主流编程助手的记忆.md) · [需求](docs/需求设计.md) · [技术](docs/技术设计.md) · [架构](docs/架构设计.md) · [路线图](docs/roadmap.md)
+[八类助手的原生记忆对照](docs/调研/主流编程助手的记忆.md) · [需求](docs/需求设计.md) · [下一版体验设计](docs/功能清单.md) · [技术](docs/技术设计.md) · [架构](docs/架构设计.md) · [路线图](docs/roadmap.md)
 
 ```sh
 go vet ./...
