@@ -231,3 +231,74 @@ func TestSharePushPullSelectiveRepoSync(t *testing.T) {
 		t.Fatalf("expected pulled file in local MEMORY.md, got:\n%s", idx.Project.IndexContent)
 	}
 }
+
+func TestSetupAntigravityPreservesExistingHooksAndRemove(t *testing.T) {
+	layout := newAdapterTestLayout(t)
+	cfgRoot := filepath.Join(layout.HomeDir, ".gemini", "config")
+	if err := os.MkdirAll(cfgRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Seed existing mcp_config.json and hooks.json (orca-status)
+	mcpPath := filepath.Join(cfgRoot, "mcp_config.json")
+	if err := os.WriteFile(mcpPath, []byte("{\n  \"mcpServers\": {\n    \"vibex-delegation-mcp\": {\"command\": \"vibex\"}\n  }\n}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	hooksPath := filepath.Join(cfgRoot, "hooks.json")
+	if err := os.WriteFile(hooksPath, []byte("{\n  \"orca-status\": {\n    \"Stop\": [{\"type\": \"command\", \"command\": \"orca-stop\"}]\n  }\n}\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. Setup antigravity
+	if _, err := RunSetup(layout, SetupOptions{Agents: "antigravity", SmemBin: "smem"}); err != nil {
+		t.Fatalf("antigravity setup failed: %v", err)
+	}
+
+	mcpAfter, err := os.ReadFile(mcpPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(mcpAfter), "vibex-delegation-mcp") || !strings.Contains(string(mcpAfter), `"smem"`) {
+		t.Fatalf("mcp_config.json missing expected keys:\n%s", string(mcpAfter))
+	}
+
+	hooksAfter, err := os.ReadFile(hooksPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(hooksAfter), "orca-status") || !strings.Contains(string(hooksAfter), "smem hook antigravity session-start") || !strings.Contains(string(hooksAfter), "smem hook antigravity pre-invocation") {
+		t.Fatalf("hooks.json missing expected keys:\n%s", string(hooksAfter))
+	}
+
+	skillPath := filepath.Join(cfgRoot, "skills", "smem", "SKILL.md")
+	if _, err := os.Stat(skillPath); err != nil {
+		t.Fatalf("expected Antigravity SKILL.md created: %v", err)
+	}
+
+	// 2. Idempotent second run
+	res2, err := RunSetup(layout, SetupOptions{Agents: "antigravity", SmemBin: "smem"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range res2.Actions {
+		if a.Action != "unchanged" {
+			t.Fatalf("expected idempotent unchanged on 2nd run, got %+v", a)
+		}
+	}
+
+	// 3. Remove cleanly strips smem while preserving orca-status and vibex-delegation-mcp
+	if _, err := RunSetup(layout, SetupOptions{Agents: "antigravity", Remove: true, SmemBin: "smem"}); err != nil {
+		t.Fatalf("antigravity remove failed: %v", err)
+	}
+	mcpRemoved, _ := os.ReadFile(mcpPath)
+	if !strings.Contains(string(mcpRemoved), "vibex-delegation-mcp") || strings.Contains(string(mcpRemoved), `"smem"`) {
+		t.Fatalf("mcp_config.json not cleanly cleaned:\n%s", string(mcpRemoved))
+	}
+	hooksRemoved, _ := os.ReadFile(hooksPath)
+	if !strings.Contains(string(hooksRemoved), "orca-status") || strings.Contains(string(hooksRemoved), "smem hook antigravity") {
+		t.Fatalf("hooks.json not cleanly cleaned:\n%s", string(hooksRemoved))
+	}
+	if _, err := os.Stat(skillPath); err == nil {
+		t.Fatalf("expected SKILL.md removed on --remove")
+	}
+}

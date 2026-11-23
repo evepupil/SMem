@@ -149,6 +149,123 @@ func TestMCPStdioFullLifecycle(t *testing.T) {
 	}
 }
 
+func TestMCPWorkspaceOverrideFromNonRepoDir(t *testing.T) {
+	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	smemHome := filepath.Join(home, ".smem")
+	nonRepo := filepath.Join(tmp, "global-dir")
+	targetRepo := filepath.Join(tmp, "target-repo")
+	if err := os.MkdirAll(nonRepo, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(targetRepo, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	layout, err := workspace.Resolve(workspace.ResolveOptions{HomeDir: home, SmemHome: smemHome, CWD: nonRepo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if layout.InProject {
+		t.Fatalf("expected nonRepo not to be in project")
+	}
+
+	srv := NewServer(memdir.NewStore(layout))
+	send := func(req any) rpcResponse {
+		b, err := json.Marshal(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out bytes.Buffer
+		if err := srv.Serve(bytes.NewReader(append(b, '\n')), &out); err != nil {
+			t.Fatalf("Serve failed: %v", err)
+		}
+		var resp rpcResponse
+		if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal response failed: %v\nraw: %s", err, out.String())
+		}
+		return resp
+	}
+
+	// Write to targetRepo via workspace parameter even though server started in nonRepo.
+	wResp := send(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": "memory_write",
+			"arguments": map[string]any{
+				"scope":       "project",
+				"type":        "project",
+				"name":        "目标项目约定",
+				"description": "测试跨目录指定 workspace 写入",
+				"content":     "通过 workspace 参数写入 targetRepo 成功。",
+				"workspace":   targetRepo,
+			},
+		},
+	})
+	wText := extractToolText(t, wResp, false)
+	if !strings.Contains(wText, "状态：created") {
+		t.Fatalf("unexpected write response: %s", wText)
+	}
+
+	// Index, search, read, and delete via workspace parameter.
+	idxResp := send(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": "memory_index",
+			"arguments": map[string]any{
+				"scope":            "project",
+				"include_manifest": true,
+				"workspace":        targetRepo,
+			},
+		},
+	})
+	idxText := extractToolText(t, idxResp, false)
+	if !strings.Contains(idxText, "目标项目约定") {
+		t.Fatalf("expected index to contain 目标项目约定, got:\n%s", idxText)
+	}
+
+	searchResp := send(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      3,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": "memory_search",
+			"arguments": map[string]any{
+				"query":     "workspace",
+				"scope":     "project",
+				"workspace": targetRepo,
+			},
+		},
+	})
+	searchText := extractToolText(t, searchResp, false)
+	if !strings.Contains(searchText, "目标项目约定") {
+		t.Fatalf("expected search hit, got:\n%s", searchText)
+	}
+
+	// Read exact file
+	readResp := send(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      4,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name": "memory_read",
+			"arguments": map[string]any{
+				"scope":     "project",
+				"files":     []string{"project_目标项目约定.md"},
+				"workspace": targetRepo,
+			},
+		},
+	})
+	readText := extractToolText(t, readResp, false)
+	if !strings.Contains(readText, "通过 workspace 参数写入 targetRepo 成功。") {
+		t.Fatalf("expected read content, got:\n%s", readText)
+	}
+}
+
 func extractToolText(t *testing.T, resp rpcResponse, wantIsError bool) string {
 	t.Helper()
 	if resp.Error != nil {

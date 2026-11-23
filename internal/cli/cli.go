@@ -22,7 +22,7 @@ const Version = "2.0.0"
 const usageText = `smem · 通用 AI 编程 Agent 统一记忆底座（Claude Code 原生格式兼容）
 
 用法:
-  smem setup [--dry-run] [--agents auto|claude,codex,cursor,gemini,opencode,copilot,windsurf,cline]
+  smem setup [--dry-run] [--agents auto|antigravity,claude,codex,cursor,gemini,opencode,copilot,windsurf,cline]
              [--claude-mode native|managed] [--shared] [--project-rules] [--status] [--remove]
   smem index [--scope all|project|global] [--rebuild] [--manifest] [--json]
   smem read [--scope project|global] [--json] <file> [file...]
@@ -36,7 +36,7 @@ const usageText = `smem · 通用 AI 编程 Agent 统一记忆底座（Claude Co
   smem sync [--remote <私有Git仓库URL>]
   smem dream [--scope all|project|global]
   smem mcp
-  smem hook <claude|codex|cursor|gemini> <session-start|prompt-submit|post-compact|before-agent>
+  smem hook <antigravity|claude|codex|cursor|gemini> <session-start|prompt-submit|post-compact|before-agent|pre-invocation>
   smem version
 `
 

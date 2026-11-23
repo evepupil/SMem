@@ -7,20 +7,25 @@ import (
 	"strings"
 
 	"smem/internal/memdir"
+	"smem/internal/workspace"
 )
 
 // Options configures a hook invocation.
 type Options struct {
-	Agent      string // claude, codex, cursor, gemini
-	Event      string // session-start, prompt-submit, post-compact, before-agent
+	Agent      string // claude, codex, cursor, gemini, antigravity
+	Event      string // session-start, prompt-submit, post-compact, before-agent, pre-invocation
 	ClaudeMode string // native (inject global only on SessionStart) | managed (inject all)
 }
 
 type hookInput struct {
-	Prompt     string `json:"prompt"`
-	UserPrompt string `json:"user_prompt"`
-	Message    string `json:"message"`
-	Input      string `json:"input"`
+	Prompt         string   `json:"prompt"`
+	UserPrompt     string   `json:"user_prompt"`
+	Message        string   `json:"message"`
+	Input          string   `json:"input"`
+	CWD            string   `json:"cwd"`
+	WorkspacePaths []string `json:"workspacePaths"`
+	LastUserInput  string   `json:"lastUserInput"`
+	InvocationNum  int      `json:"invocationNum"`
 }
 
 // Handle executes a deterministic, fail-open lifecycle hook (< 5ms, zero LLM).
@@ -36,13 +41,36 @@ func Handle(store *memdir.Store, opts Options, stdin io.Reader, stdout io.Writer
 			_ = json.Unmarshal(raw, &in)
 		}
 	}
-	prompt := firstNonEmpty(in.Prompt, in.UserPrompt, in.Message, in.Input)
+
+	targetCWD := strings.TrimSpace(in.CWD)
+	if targetCWD == "" && len(in.WorkspacePaths) > 0 {
+		targetCWD = strings.TrimSpace(in.WorkspacePaths[0])
+	}
+	if targetCWD != "" {
+		if resolved, err := workspace.Resolve(workspace.ResolveOptions{
+			HomeDir:  store.Layout.HomeDir,
+			SmemHome: store.Layout.SmemHome,
+			CWD:      targetCWD,
+		}); err == nil {
+			nextStore := memdir.NewStore(resolved)
+			nextStore.Now = store.Now
+			store = nextStore
+		}
+	}
+
+	prompt := firstNonEmpty(in.Prompt, in.UserPrompt, in.LastUserInput, in.Message, in.Input)
 
 	var additionalContext string
 	switch event {
 	case "session-start", "post-compact":
 		additionalContext = buildIndexInjection(store, agent, opts.ClaudeMode)
 	case "prompt-submit":
+		additionalContext = buildPromptSubmitContext(store, agent, opts.ClaudeMode, prompt, false)
+	case "pre-invocation":
+		// Skip duplicate prompt injection on subsequent tool-call iterations within the same turn.
+		if in.InvocationNum > 1 {
+			return writeHookJSON(stdout, agent, event, "")
+		}
 		additionalContext = buildPromptSubmitContext(store, agent, opts.ClaudeMode, prompt, false)
 	case "before-agent":
 		// Gemini CLI BeforeAgent runs before each turn; include compact index + intent hints.
@@ -60,6 +88,8 @@ func normalizeEvent(ev string) string {
 		return "session-start"
 	case "prompt-submit", "userpromptsubmit", "user_prompt_submit", "beforesubmitprompt", "before_submit_prompt":
 		return "prompt-submit"
+	case "pre-invocation", "preinvocation", "pre_invocation":
+		return "pre-invocation"
 	case "post-compact", "postcompact", "post_compact":
 		return "post-compact"
 	case "before-agent", "beforeagent", "before_agent":
@@ -78,14 +108,27 @@ func buildIndexInjection(store *memdir.Store, agent, claudeMode string) string {
 	}
 
 	rendered, idxRes, err := store.RenderCombinedIndex(scopeFilter)
-	if err != nil || strings.TrimSpace(rendered) == "" {
+	if err != nil {
+		return ""
+	}
+	hasIndex := strings.TrimSpace(rendered) != ""
+	isAntigravityProject := agent == "antigravity" && store.Layout.InProject
+	if !hasIndex && !isAntigravityProject {
 		return ""
 	}
 
 	var b strings.Builder
 	b.WriteString("<smem-memory-index>\n")
-	b.WriteString("以下是 SMem 跨工具共享记忆目录（项目记忆请按触发说明主动调用 MCP `memory_read` 读取正文后再作答；涉及代码/命令前请先核对当前源码）：\n\n")
-	b.WriteString(rendered)
+	if isAntigravityProject {
+		b.WriteString(fmt.Sprintf("当前工作区已绑定 SMem 共享记忆：%s（调用 `smem` MCP `memory_*` 工具读写项目记忆时请传入 `workspace: %q`）。\n",
+			store.Layout.RepoRoot, store.Layout.RepoRoot))
+	}
+	if hasIndex {
+		b.WriteString("以下是 SMem 跨工具共享记忆目录（项目记忆请按触发说明主动调用 MCP `memory_read` 读取正文后再作答；涉及代码/命令前请先核对当前源码）：\n\n")
+		b.WriteString(rendered)
+	} else {
+		b.WriteString("当前项目与全局尚无已保存记忆条目；遇到持久约定、项目决策或个人偏好时，可调用 `memory_write` 保存。")
+	}
 
 	// Inline compact global preferences (up to 2KB total) so cross-project user preferences
 	// take effect on Turn 1 without requiring an extra MCP round-trip in every session.
@@ -227,6 +270,16 @@ func writeHookJSON(w io.Writer, agent, event, additionalContext string) error {
 	}
 
 	switch agent {
+	case "antigravity":
+		return enc.Encode(map[string]any{
+			"injectSteps": []map[string]any{
+				{
+					"systemMessage": map[string]any{
+						"systemMessage": additionalContext,
+					},
+				},
+			},
+		})
 	case "cursor":
 		return enc.Encode(map[string]any{
 			"additional_context": additionalContext,

@@ -15,6 +15,7 @@ import (
 
 // AllSupportedAgents lists every built-in coding agent adapter.
 var AllSupportedAgents = []string{
+	"antigravity",
 	"claude",
 	"codex",
 	"cursor",
@@ -80,6 +81,8 @@ func DetectAgents(layout workspace.Layout) []string {
 	}
 
 	codexHome := resolveCodexHome(layout.HomeDir)
+	check("antigravity", dirOrFileExists(filepath.Join(layout.HomeDir, ".gemini", "config")) ||
+		dirOrFileExists(filepath.Join(layout.HomeDir, ".gemini", "antigravity")))
 	check("claude", dirOrFileExists(filepath.Join(layout.HomeDir, ".claude")) ||
 		dirOrFileExists(filepath.Join(layout.HomeDir, ".claude.json")) ||
 		hasBinary("claude"))
@@ -261,6 +264,8 @@ func resolveSelectedAgents(spec string, detected []string) ([]string, error) {
 
 func planAgentActions(layout workspace.Layout, agent string, opts SetupOptions) ([]PlannedAction, error) {
 	switch agent {
+	case "antigravity":
+		return planAntigravity(layout, opts)
 	case "claude":
 		return planClaude(layout, opts)
 	case "codex":
@@ -280,6 +285,64 @@ func planAgentActions(layout workspace.Layout, agent string, opts SetupOptions) 
 	default:
 		return nil, nil
 	}
+}
+
+func planAntigravity(layout workspace.Layout, opts SetupOptions) ([]PlannedAction, error) {
+	var actions []PlannedAction
+	configRoot := filepath.Join(layout.HomeDir, ".gemini", "config")
+
+	// 1. ~/.gemini/config/mcp_config.json
+	mcpPath := filepath.Join(configRoot, "mcp_config.json")
+	a1, err := planJSONPatch("antigravity", "mcp", mcpPath, "在 Antigravity mcp_config.json 注册 smem MCP 服务", opts.Remove, func(root map[string]any) {
+		servers := getOrCreateMap(root, "mcpServers")
+		if opts.Remove {
+			delete(servers, "smem")
+		} else {
+			servers["smem"] = map[string]any{
+				"command": opts.SmemBin,
+				"args":    []string{"mcp"},
+			}
+		}
+	})
+	if err != nil {
+		return nil, err
+	}
+	actions = append(actions, a1)
+
+	// 2. ~/.gemini/config/hooks.json (preserve existing top-level keys like orca-status)
+	hooksPath := filepath.Join(configRoot, "hooks.json")
+	a2, err := planJSONPatch("antigravity", "hooks", hooksPath, "在 Antigravity hooks.json 注册 SessionStart 与 PreInvocation 钩子", opts.Remove, func(root map[string]any) {
+		if opts.Remove {
+			delete(root, "smem")
+			return
+		}
+		root["smem"] = map[string]any{
+			"SessionStart": []any{
+				map[string]any{
+					"type":    "command",
+					"command": quoteCommand(opts.SmemBin, "hook", "antigravity", "session-start"),
+					"timeout": 10,
+				},
+			},
+			"PreInvocation": []any{
+				map[string]any{
+					"type":    "command",
+					"command": quoteCommand(opts.SmemBin, "hook", "antigravity", "pre-invocation"),
+					"timeout": 10,
+				},
+			},
+		}
+	})
+	if err != nil {
+		return nil, err
+	}
+	actions = append(actions, a2)
+
+	// 3. ~/.gemini/config/skills/smem/SKILL.md
+	skillPath := filepath.Join(configRoot, "skills", "smem", "SKILL.md")
+	actions = append(actions, planStaticFile("antigravity", "skill", skillPath, "安装 Antigravity SMem Agent Skill 规范", []byte(SkillMarkdown), 0644, opts.Remove))
+
+	return actions, nil
 }
 
 func planClaude(layout workspace.Layout, opts SetupOptions) ([]PlannedAction, error) {
@@ -676,6 +739,17 @@ func buildAction(agent, kind, path, desc string, orig, after []byte, perm os.Fil
 
 func checkAgentConfigured(layout workspace.Layout, agent string) (bool, string) {
 	switch agent {
+	case "antigravity":
+		configRoot := filepath.Join(layout.HomeDir, ".gemini", "config")
+		hasMCP := fileContains(filepath.Join(configRoot, "mcp_config.json"), `"smem"`)
+		hasHooks := fileContains(filepath.Join(configRoot, "hooks.json"), "smem hook antigravity")
+		if hasMCP && hasHooks {
+			return true, "MCP + Hooks 已就绪"
+		}
+		if hasMCP {
+			return true, "MCP 已配置"
+		}
+		return false, "未接入"
 	case "claude":
 		hasMCP := fileContains(filepath.Join(layout.HomeDir, ".claude.json"), `"smem"`)
 		hasLocal := layout.InProject && fileContains(filepath.Join(layout.RepoRoot, ".claude", "settings.local.json"), "autoMemoryDirectory")

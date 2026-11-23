@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"smem/internal/memdir"
+	"smem/internal/workspace"
 )
 
 const (
@@ -34,6 +35,24 @@ type Server struct {
 // NewServer creates an MCP server backed by Store.
 func NewServer(store *memdir.Store) *Server {
 	return &Server{Store: store}
+}
+
+func (s *Server) storeForWorkspace(ws string) (*memdir.Store, error) {
+	ws = strings.TrimSpace(ws)
+	if ws == "" {
+		return s.Store, nil
+	}
+	layout, err := workspace.Resolve(workspace.ResolveOptions{
+		HomeDir:  s.Store.Layout.HomeDir,
+		SmemHome: s.Store.Layout.SmemHome,
+		CWD:      ws,
+	})
+	if err != nil {
+		return nil, err
+	}
+	st := memdir.NewStore(layout)
+	st.Now = s.Store.Now
+	return st, nil
 }
 
 type rpcRequest struct {
@@ -189,17 +208,22 @@ func (s *Server) callIndex(raw json.RawMessage) (string, error) {
 	var args struct {
 		Scope           string `json:"scope"`
 		IncludeManifest bool   `json:"include_manifest"`
+		Workspace       string `json:"workspace"`
 	}
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &args); err != nil {
 			return "", err
 		}
 	}
+	st, err := s.storeForWorkspace(args.Workspace)
+	if err != nil {
+		return "", err
+	}
 	scopeFilter := args.Scope
 	if scopeFilter == "" {
 		scopeFilter = "all"
 	}
-	rendered, res, err := s.Store.RenderCombinedIndex(scopeFilter)
+	rendered, res, err := st.RenderCombinedIndex(scopeFilter)
 	if err != nil {
 		return "", err
 	}
@@ -230,10 +254,15 @@ func (s *Server) callIndex(raw json.RawMessage) (string, error) {
 
 func (s *Server) callRead(raw json.RawMessage) (string, error) {
 	var args struct {
-		Scope string   `json:"scope"`
-		Files []string `json:"files"`
+		Scope     string   `json:"scope"`
+		Files     []string `json:"files"`
+		Workspace string   `json:"workspace"`
 	}
 	if err := json.Unmarshal(raw, &args); err != nil {
+		return "", err
+	}
+	st, err := s.storeForWorkspace(args.Workspace)
+	if err != nil {
 		return "", err
 	}
 	sc, err := memdir.ParseScope(args.Scope)
@@ -247,7 +276,7 @@ func (s *Server) callRead(raw json.RawMessage) (string, error) {
 		return "", fmt.Errorf("单次最多读取 5 个记忆文件以控制上下文预算，当前传入 %d 个", len(args.Files))
 	}
 
-	entries, err := s.Store.Read(sc, args.Files)
+	entries, err := st.Read(sc, args.Files)
 	if err != nil {
 		return "", err
 	}
@@ -277,8 +306,13 @@ func (s *Server) callWrite(raw json.RawMessage) (string, error) {
 		Content     string `json:"content"`
 		File        string `json:"file"`
 		ETag        string `json:"etag"`
+		Workspace   string `json:"workspace"`
 	}
 	if err := json.Unmarshal(raw, &args); err != nil {
+		return "", err
+	}
+	st, err := s.storeForWorkspace(args.Workspace)
+	if err != nil {
 		return "", err
 	}
 	sc, err := memdir.ParseScope(args.Scope)
@@ -290,7 +324,7 @@ func (s *Server) callWrite(raw json.RawMessage) (string, error) {
 		return "", err
 	}
 
-	res, err := s.Store.Write(memdir.WriteRequest{
+	res, err := st.Write(memdir.WriteRequest{
 		Scope:       sc,
 		Type:        mt,
 		Name:        args.Name,
@@ -316,18 +350,23 @@ func (s *Server) callWrite(raw json.RawMessage) (string, error) {
 
 func (s *Server) callDelete(raw json.RawMessage) (string, error) {
 	var args struct {
-		Scope string `json:"scope"`
-		File  string `json:"file"`
-		ETag  string `json:"etag"`
+		Scope     string `json:"scope"`
+		File      string `json:"file"`
+		ETag      string `json:"etag"`
+		Workspace string `json:"workspace"`
 	}
 	if err := json.Unmarshal(raw, &args); err != nil {
+		return "", err
+	}
+	st, err := s.storeForWorkspace(args.Workspace)
+	if err != nil {
 		return "", err
 	}
 	sc, err := memdir.ParseScope(args.Scope)
 	if err != nil {
 		return "", err
 	}
-	if err := s.Store.Delete(memdir.DeleteRequest{
+	if err := st.Delete(memdir.DeleteRequest{
 		Scope: sc,
 		File:  args.File,
 		ETag:  args.ETag,
@@ -339,15 +378,20 @@ func (s *Server) callDelete(raw json.RawMessage) (string, error) {
 
 func (s *Server) callSearch(raw json.RawMessage) (string, error) {
 	var args struct {
-		Query string `json:"query"`
-		Scope string `json:"scope"`
-		Type  string `json:"type"`
-		Limit int    `json:"limit"`
+		Query     string `json:"query"`
+		Scope     string `json:"scope"`
+		Type      string `json:"type"`
+		Limit     int    `json:"limit"`
+		Workspace string `json:"workspace"`
 	}
 	if err := json.Unmarshal(raw, &args); err != nil {
 		return "", err
 	}
-	hits, err := s.Store.Search(memdir.SearchOptions{
+	st, err := s.storeForWorkspace(args.Workspace)
+	if err != nil {
+		return "", err
+	}
+	hits, err := st.Search(memdir.SearchOptions{
 		Query: args.Query,
 		Scope: args.Scope,
 		Type:  args.Type,
@@ -435,6 +479,10 @@ func (s *Server) handlePromptGet(req rpcRequest) rpcResponse {
 }
 
 func toolDefinitions() []map[string]any {
+	wsProp := map[string]any{
+		"type":        "string",
+		"description": "可选：目标项目目录绝对路径（IDE 全局 MCP 进程不在项目目录内时传入，默认使用当前工作目录）",
+	}
 	return []map[string]any{
 		{
 			"name":        "memory_index",
@@ -451,6 +499,7 @@ func toolDefinitions() []map[string]any {
 						"type":        "boolean",
 						"description": "是否附带所有主题文件的详细清单（含 type、age、etag），用于整理或核对",
 					},
+					"workspace": wsProp,
 				},
 			},
 		},
@@ -472,6 +521,7 @@ func toolDefinitions() []map[string]any {
 						"maxItems":    5,
 						"description": "来自 MEMORY.md 或 memory_search 的主题文件名列表（如 project_release_owner.md）",
 					},
+					"workspace": wsProp,
 				},
 			},
 		},
@@ -512,6 +562,7 @@ func toolDefinitions() []map[string]any {
 						"type":        "string",
 						"description": "更新已有记忆时必填最新 etag（来自 memory_read）",
 					},
+					"workspace": wsProp,
 				},
 			},
 		},
@@ -522,9 +573,10 @@ func toolDefinitions() []map[string]any {
 				"type":     "object",
 				"required": []string{"scope", "file", "etag"},
 				"properties": map[string]any{
-					"scope": map[string]any{"type": "string", "enum": []string{"project", "global"}},
-					"file":  map[string]any{"type": "string"},
-					"etag":  map[string]any{"type": "string"},
+					"scope":     map[string]any{"type": "string", "enum": []string{"project", "global"}},
+					"file":      map[string]any{"type": "string"},
+					"etag":      map[string]any{"type": "string"},
+					"workspace": wsProp,
 				},
 			},
 		},
@@ -535,10 +587,11 @@ func toolDefinitions() []map[string]any {
 				"type":     "object",
 				"required": []string{"query"},
 				"properties": map[string]any{
-					"query": map[string]any{"type": "string", "description": "搜索关键词（推荐 2-3 个实词）"},
-					"scope": map[string]any{"type": "string", "enum": []string{"all", "project", "global"}},
-					"type":  map[string]any{"type": "string", "enum": []string{"user", "feedback", "project", "reference"}},
-					"limit": map[string]any{"type": "integer", "minimum": 1, "maximum": 20},
+					"query":     map[string]any{"type": "string", "description": "搜索关键词（推荐 2-3 个实词）"},
+					"scope":     map[string]any{"type": "string", "enum": []string{"all", "project", "global"}},
+					"type":      map[string]any{"type": "string", "enum": []string{"user", "feedback", "project", "reference"}},
+					"limit":     map[string]any{"type": "integer", "minimum": 1, "maximum": 20},
+					"workspace": wsProp,
 				},
 			},
 		},
