@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"smem/internal/adapters"
+	"smem/internal/memdir"
 	"smem/internal/workspace"
 )
 
@@ -179,5 +181,107 @@ func TestCLIBindAndUnbindWorkflow(t *testing.T) {
 	}
 	if err := json.Unmarshal([]byte(unbindOut), &unbindRes); err != nil || !unbindRes.Unbound || unbindRes.ProjectDir != boundLayout.ProjectLocalDir {
 		t.Fatalf("unexpected unbind json: err=%v out=%s", err, unbindOut)
+	}
+}
+
+func TestSetupImportWizardSelectionAndFlags(t *testing.T) {
+	t.Setenv("CODEX_HOME", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+
+	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	repo := filepath.Join(tmp, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git", "info"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	claudeDir := workspace.ClaudeNativeMemoryDir(home, repo)
+	codexMem := filepath.Join(home, ".codex", "memories")
+	if err := os.MkdirAll(claudeDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(codexMem, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(claudeDir, "rule1.md"), []byte("Claude 项目规则。\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(codexMem, "note1.md"), []byte("Codex 全局笔记。\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	layout, err := workspace.Resolve(workspace.ResolveOptions{HomeDir: home, CWD: repo})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. parseSelectionIndices supports commas (EN/ZH), ranges, and rejects bad inputs.
+	idxs, err := parseSelectionIndices("1，3-4", 4)
+	if err != nil || len(idxs) != 3 || idxs[0] != 0 || idxs[1] != 2 || idxs[2] != 3 {
+		t.Fatalf("unexpected parseSelectionIndices result: idxs=%v err=%v", idxs, err)
+	}
+	if _, err := parseSelectionIndices("9", 2); err == nil {
+		t.Fatalf("expected out-of-range error")
+	}
+
+	// 2. Interactive wizard: default all selected -> user toggles #2 off -> Enter imports ONLY #1 (Claude project)!
+	candidates := adapters.DiscoverImportSources(layout)
+	if len(candidates) != 2 {
+		t.Fatalf("expected 2 candidates, got %d", len(candidates))
+	}
+	store := memdir.NewStore(layout)
+	var wizOut bytes.Buffer
+	wizRes, err := runInteractiveImportWizard(candidates, store, strings.NewReader("2\n\n"), &wizOut)
+	if err != nil {
+		t.Fatalf("wizard failed: %v\n%s", err, wizOut.String())
+	}
+	if len(wizRes) != 1 || wizRes[0].Source != "claude" || wizRes[0].Imported != 1 {
+		t.Fatalf("expected only Claude imported after toggling #2 off, got %+v\n%s", wizRes, wizOut.String())
+	}
+	if !strings.Contains(wizOut.String(), "smem bind") {
+		t.Fatalf("expected manual bind/import hint in wizard output:\n%s", wizOut.String())
+	}
+
+	idxAfterWiz, err := store.Index("all")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if idxAfterWiz.Project.TopicCount != 1 || idxAfterWiz.Global.TopicCount != 0 {
+		t.Fatalf("expected 1 project entry and 0 global entries after deselecting Codex, got project=%d global=%d",
+			idxAfterWiz.Project.TopicCount, idxAfterWiz.Global.TopicCount)
+	}
+
+	// 3. Setup with --import automatically imports remaining checked sources (Codex -> global).
+	var out, errOut bytes.Buffer
+	if err := Run([]string{"setup", "--agents", "claude,codex", "--import", "--bin", "smem"}, layout, strings.NewReader(""), &out, &errOut); err != nil {
+		t.Fatalf("setup --import failed: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "导入完成") {
+		t.Fatalf("expected import completion summary, got:\n%s", out.String())
+	}
+	idxAfterImport, err := store.Index("all")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if idxAfterImport.Global.TopicCount != 1 {
+		t.Fatalf("expected Codex global entry imported via --import, got %d", idxAfterImport.Global.TopicCount)
+	}
+
+	// 4. Dry-run in an empty repo shows manual bind/import tip cleanly.
+	emptyRepo := filepath.Join(tmp, "empty-repo")
+	emptyHome := filepath.Join(tmp, "empty-home")
+	if err := os.MkdirAll(filepath.Join(emptyRepo, ".git", "info"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	emptyLayout, err := workspace.Resolve(workspace.ResolveOptions{HomeDir: emptyHome, CWD: emptyRepo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := Run([]string{"setup", "--agents", "claude", "--dry-run", "--bin", "smem"}, emptyLayout, strings.NewReader(""), &out, &errOut); err != nil {
+		t.Fatalf("setup --dry-run failed: %v", err)
+	}
+	if !strings.Contains(out.String(), "未在默认记忆目录中发现待导入条目") || !strings.Contains(out.String(), "smem bind") {
+		t.Fatalf("expected empty discovery + manual bind hint on dry-run:\n%s", out.String())
 	}
 }

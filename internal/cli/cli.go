@@ -24,7 +24,8 @@ const usageText = `smem · 通用 AI 编程 Agent 统一记忆底座（Claude Co
 
 用法:
   smem setup [--dry-run] [--agents auto|antigravity,claude,codex,cursor,gemini,opencode,copilot,windsurf,cline]
-             [--claude-mode native|managed] [--shared] [--project-rules] [--status] [--remove]
+             [--claude-mode native|managed] [--shared] [--project-rules]
+             [--import | --no-import] [--status] [--remove]
   smem index [--scope all|project|global] [--rebuild] [--manifest] [--json]
   smem read [--scope project|global] [--json] <file> [file...]
   smem write [--scope project|global] --type user|feedback|project|reference --name "标题"
@@ -60,7 +61,7 @@ func Run(args []string, layout workspace.Layout, in io.Reader, out, errOut io.Wr
 		_, _ = fmt.Fprintf(out, "smem v%s\n", Version)
 		return nil
 	case "setup":
-		return runSetup(args[1:], layout, out, errOut)
+		return runSetup(args[1:], layout, in, out, errOut)
 	case "index":
 		return runIndex(args[1:], store, out, errOut)
 	case "read":
@@ -94,7 +95,7 @@ func Run(args []string, layout workspace.Layout, in io.Reader, out, errOut io.Wr
 	}
 }
 
-func runSetup(args []string, layout workspace.Layout, out, errOut io.Writer) error {
+func runSetup(args []string, layout workspace.Layout, in io.Reader, out, errOut io.Writer) error {
 	fs := flag.NewFlagSet("smem setup", flag.ContinueOnError)
 	fs.SetOutput(errOut)
 	agentsSpec := fs.String("agents", "auto", "auto、all 或逗号分隔的工具名")
@@ -102,12 +103,17 @@ func runSetup(args []string, layout workspace.Layout, out, errOut io.Writer) err
 	shared := fs.Bool("shared", false, "直接绑定项目记忆到 <repo>/.smem/memory/（默认存放 ~/.smem/projects/<repo-id>/ 不污染仓库）")
 	projectRules := fs.Bool("project-rules", false, "同时在项目根写入 AGENTS.md 与 .agents/skills/smem/SKILL.md")
 	dryRun := fs.Bool("dry-run", false, "仅预览拟改动的配置文件，不实际写入")
+	doImport := fs.Bool("import", false, "跳过交互确认，自动导入扫到的默认原生记忆")
+	noImport := fs.Bool("no-import", false, "跳过原有记忆扫描与引导导入")
 	statusOnly := fs.Bool("status", false, "查看各主流编程工具的探测与接入状态")
 	remove := fs.Bool("remove", false, "安全移除 SMem 写入的接入配置（保留记忆文件）")
 	smemBin := fs.String("bin", "", "写入工具配置中的 smem 可执行文件路径（默认自动解析）")
 	asJSON := fs.Bool("json", false, "输出 JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *doImport && *noImport {
+		return errors.New("--import 与 --no-import 不能同时使用")
 	}
 
 	if *statusOnly {
@@ -166,8 +172,47 @@ func runSetup(args []string, layout workspace.Layout, out, errOut io.Writer) err
 	if err != nil {
 		return err
 	}
+
+	effectiveLayout := layout
+	if *shared {
+		effectiveLayout.SharedMode = true
+	}
+
+	var candidates []adapters.ImportCandidate
+	if !*remove && !*noImport {
+		candidates = adapters.DiscoverImportSources(effectiveLayout)
+	}
+
 	if *asJSON {
-		return writeJSON(out, res)
+		var importResults []adapters.ImportResult
+		if !*remove && !*dryRun && *doImport && len(candidates) > 0 {
+			store := memdir.NewStore(effectiveLayout)
+			for _, c := range candidates {
+				impRes, impErr := adapters.RunImport(store, adapters.ImportOptions{
+					From:  c.Source,
+					Path:  c.Dir,
+					Scope: c.DefaultScope,
+				})
+				if impErr != nil {
+					return impErr
+				}
+				importResults = append(importResults, impRes)
+			}
+		}
+		return writeJSON(out, map[string]any{
+			"setup":             res,
+			"detected_agents":   res.DetectedAgents,
+			"selected_agents":   res.SelectedAgents,
+			"claude_mode":       res.ClaudeMode,
+			"shared_mode":       res.SharedMode,
+			"project_dir":       res.ProjectDir,
+			"global_dir":        res.GlobalDir,
+			"dry_run":           res.DryRun,
+			"remove":            res.Remove,
+			"actions":           res.Actions,
+			"import_candidates": candidates,
+			"import_results":    importResults,
+		})
 	}
 
 	header := "SMem 接入完成"
@@ -191,6 +236,13 @@ func runSetup(args []string, layout workspace.Layout, out, errOut io.Writer) err
 	}
 	if !res.Remove {
 		_, _ = fmt.Fprintln(out, "\n"+adapters.UniversalSnippet(bin))
+		if _, impErr := executeSetupImportFlow(effectiveLayout, candidates, setupImportOptions{
+			DryRun:   *dryRun,
+			DoImport: *doImport,
+			NoImport: *noImport,
+		}, in, out); impErr != nil {
+			return impErr
+		}
 		if !res.DryRun {
 			_, _ = fmt.Fprintln(out, "\n提示：请重新开启 AI 编程工具会话以加载最新 MCP 与 Hooks。")
 		}
@@ -675,15 +727,19 @@ func runImport(args []string, store *memdir.Store, out, errOut io.Writer) error 
 	fs.SetOutput(errOut)
 	from := fs.String("from", "", "来源：claude、codex、cline 或 dir")
 	path := fs.String("path", "", "可选显式目录路径")
-	scopeStr := fs.String("scope", "project", "导入目标作用域：project 或 global")
+	scopeStr := fs.String("scope", "", "导入目标作用域：project 或 global（未传时 codex 默认 global，其余默认 project）")
 	dryRun := fs.Bool("dry-run", false, "仅预览候选导入文件，不写入")
 	asJSON := fs.Bool("json", false, "输出 JSON")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	sc, err := memdir.ParseScope(*scopeStr)
-	if err != nil {
-		return err
+	var sc memdir.Scope
+	if strings.TrimSpace(*scopeStr) != "" {
+		var err error
+		sc, err = memdir.ParseScope(*scopeStr)
+		if err != nil {
+			return err
+		}
 	}
 	res, err := adapters.RunImport(store, adapters.ImportOptions{
 		From:   *from,

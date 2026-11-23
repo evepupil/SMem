@@ -332,3 +332,81 @@ func TestSetupClaudeCustomConfigDir(t *testing.T) {
 		t.Fatalf("default ~/.claude.json should not be modified when CLAUDE_CONFIG_DIR is set")
 	}
 }
+
+func TestDiscoverImportSourcesAndCodexFiltering(t *testing.T) {
+	t.Setenv("CODEX_HOME", "")
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	layout := newAdapterTestLayout(t)
+
+	// Populate Claude default project memory dir (2 topic files + MEMORY.md).
+	claudeDir := workspace.ClaudeNativeMemoryDir(layout.HomeDir, layout.RepoRoot)
+	if err := os.MkdirAll(claudeDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(claudeDir, "MEMORY.md"), []byte("# index\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(claudeDir, "proj_rule.md"), []byte("开发规矩：禁止直接 push main。\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(claudeDir, "feedback_terse.md"), []byte("回复简短直接。\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Populate Codex memories dir including files that must be skipped (.git, MEMORY.md, raw_memories.md, memory_summary.md, skills).
+	codexMem := filepath.Join(layout.HomeDir, ".codex", "memories")
+	for _, sub := range []string{".git", "skills/my-skill", "extensions/notes", "rollout_summaries"} {
+		if err := os.MkdirAll(filepath.Join(codexMem, sub), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite := func(rel, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(codexMem, rel), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mustWrite("MEMORY.md", "# codex big index\n")
+	mustWrite("memory_summary.md", "consolidated digest\n")
+	mustWrite("raw_memories.md", "huge raw dump\n")
+	mustWrite(".git/HEAD.md", "should skip hidden dir\n")
+	mustWrite("skills/my-skill/SKILL.md", "should skip skills dir\n")
+	mustWrite("extensions/notes/pref.md", "Codex 扩展偏好记录。\n")
+	mustWrite("rollout_summaries/r1.md", "Rollout 会话总结条目。\n")
+
+	cands := DiscoverImportSources(layout)
+	if len(cands) != 2 {
+		t.Fatalf("expected 2 discovered import candidates (claude + codex), got %+v", cands)
+	}
+	if cands[0].Source != "claude" || cands[0].Count != 2 || cands[0].DefaultScope != memdir.ScopeProject || !cands[0].Selected {
+		t.Fatalf("unexpected Claude candidate: %+v", cands[0])
+	}
+	if cands[1].Source != "codex" || cands[1].Count != 2 || cands[1].DefaultScope != memdir.ScopeGlobal || !cands[1].Selected {
+		t.Fatalf("unexpected Codex candidate (expected 2 filtered entries -> global): %+v", cands[1])
+	}
+
+	// Running RunImport with From="codex" and empty Scope defaults to global and skips summary dumps.
+	store := memdir.NewStore(layout)
+	codexRes, err := RunImport(store, ImportOptions{From: "codex"})
+	if err != nil {
+		t.Fatalf("codex import failed: %v", err)
+	}
+	if codexRes.Scope != memdir.ScopeGlobal || codexRes.Imported != 2 {
+		t.Fatalf("expected codex import to default to global and import 2 entries, got %+v", codexRes)
+	}
+
+	// If project is bound directly to Claude's native memory dir, discovery must exclude it to prevent self-import.
+	if _, err := workspace.BindProject(layout.SmemHome, layout.RepoID, claudeDir); err != nil {
+		t.Fatal(err)
+	}
+	boundLayout, err := workspace.Resolve(workspace.ResolveOptions{HomeDir: layout.HomeDir, SmemHome: layout.SmemHome, CWD: layout.RepoRoot})
+	if err != nil {
+		t.Fatal(err)
+	}
+	candsAfterBind := DiscoverImportSources(boundLayout)
+	for _, c := range candsAfterBind {
+		if c.Source == "claude" {
+			t.Fatalf("bound Claude directory must not be listed for self-import: %+v", c)
+		}
+	}
+}

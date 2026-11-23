@@ -5,12 +5,24 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"smem/internal/guard"
 	"smem/internal/memdir"
 	"smem/internal/workspace"
 )
+
+// ImportCandidate describes one discovered native memory directory eligible for migration.
+type ImportCandidate struct {
+	Agent        string       `json:"agent"`
+	Label        string       `json:"label"`
+	Source       string       `json:"source"`
+	Dir          string       `json:"dir"`
+	DefaultScope memdir.Scope `json:"default_scope"`
+	Count        int          `json:"count"`
+	Selected     bool         `json:"selected"`
+}
 
 // ImportOptions configures native memory migration into SMem.
 type ImportOptions struct {
@@ -49,7 +61,11 @@ func RunImport(store *memdir.Store, opts ImportOptions) (ImportResult, error) {
 	}
 	scope := opts.Scope
 	if scope == "" {
-		scope = memdir.ScopeProject
+		if source == "codex" {
+			scope = memdir.ScopeGlobal
+		} else {
+			scope = memdir.ScopeProject
+		}
 	}
 
 	sourceDir, err := resolveImportDir(store.Layout, source, opts.Path)
@@ -217,6 +233,14 @@ func collectMarkdownFiles(root, source string) ([]string, error) {
 			return nil
 		}
 		if d.IsDir() {
+			// Skip hidden dirs (.git, .codex-baseline, etc.) everywhere.
+			if p != root && strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir
+			}
+			// Skip Codex internal skills directory directly under memories root.
+			if source == "codex" && filepath.Dir(p) == filepath.Clean(root) && strings.EqualFold(d.Name(), "skills") {
+				return filepath.SkipDir
+			}
 			// For claude/dir/cline stay flat; for codex walk nested extension/notes directories.
 			if p != root && source != "codex" {
 				return filepath.SkipDir
@@ -230,8 +254,146 @@ func collectMarkdownFiles(root, source string) ([]string, error) {
 		if strings.EqualFold(name, memdir.IndexFileName) {
 			return nil
 		}
+		if source == "codex" && isCodexSummaryFile(name) {
+			return nil
+		}
 		files = append(files, p)
 		return nil
 	})
 	return files, err
+}
+
+func isCodexSummaryFile(name string) bool {
+	return strings.EqualFold(name, "memory_summary.md") || strings.EqualFold(name, "raw_memories.md")
+}
+
+// DiscoverImportSources scans only standard default tool memory directories and counts importable entries,
+// skipping directories that already match SMem's active target directories (including smem bind targets).
+func DiscoverImportSources(layout workspace.Layout) []ImportCandidate {
+	excluded := make(map[string]bool)
+	markExcluded := func(p string) {
+		if strings.TrimSpace(p) != "" {
+			excluded[cleanPathKey(p)] = true
+		}
+	}
+	markExcluded(layout.GlobalDir)
+	if layout.InProject {
+		markExcluded(layout.ProjectDir())
+		markExcluded(layout.ProjectLocalDir)
+		markExcluded(layout.RepoSharedDir)
+	}
+
+	seen := make(map[string]bool)
+	var out []ImportCandidate
+
+	tryAdd := func(agent, label, source, dir string, scope memdir.Scope) bool {
+		if strings.TrimSpace(dir) == "" || !dirOrFileExists(dir) {
+			return false
+		}
+		key := cleanPathKey(dir)
+		if excluded[key] || seen[key] {
+			return false
+		}
+		count := countImportableMarkdown(dir, source)
+		if count == 0 {
+			return false
+		}
+		seen[key] = true
+		out = append(out, ImportCandidate{
+			Agent:        agent,
+			Label:        label,
+			Source:       source,
+			Dir:          filepath.Clean(dir),
+			DefaultScope: scope,
+			Count:        count,
+			Selected:     true,
+		})
+		return true
+	}
+
+	// 1. Claude Code default (~/.claude) & optional current CLAUDE_CONFIG_DIR for this project.
+	if layout.InProject {
+		repoVariants := collectRepoPathVariants(layout)
+		defaultClaudeDir := filepath.Join(layout.HomeDir, ".claude")
+		if envDir := strings.TrimSpace(os.Getenv("CLAUDE_CONFIG_DIR")); envDir != "" && cleanPathKey(envDir) != cleanPathKey(defaultClaudeDir) {
+			for _, p := range repoVariants {
+				if tryAdd("claude", "Claude Code（CLAUDE_CONFIG_DIR）", "claude", workspace.ClaudeNativeMemoryDirIn(envDir, p), memdir.ScopeProject) {
+					break
+				}
+			}
+		}
+		for _, p := range repoVariants {
+			if tryAdd("claude", "Claude Code（默认目录）", "claude", workspace.ClaudeNativeMemoryDirIn(defaultClaudeDir, p), memdir.ScopeProject) {
+				break
+			}
+		}
+	}
+
+	// 2. Codex CLI cross-project memory directory ($CODEX_HOME/memories_v2 or memories).
+	codexHome := resolveCodexHome(layout.HomeDir)
+	for _, sub := range []string{"memories_v2", "memories"} {
+		cand := filepath.Join(codexHome, sub)
+		if tryAdd("codex", "Codex CLI（跨项目记忆）", "codex", cand, memdir.ScopeGlobal) {
+			break
+		}
+	}
+
+	// 3. Cline / Roo Code per-repo memory-bank.
+	if layout.InProject {
+		tryAdd("cline", "Cline / Roo (memory-bank)", "cline", filepath.Join(layout.RepoRoot, "memory-bank"), memdir.ScopeProject)
+	}
+
+	return out
+}
+
+func collectRepoPathVariants(layout workspace.Layout) []string {
+	var candidates []string
+	seen := make(map[string]bool)
+	add := func(p string) {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			return
+		}
+		key := cleanPathKey(p)
+		if !seen[key] {
+			seen[key] = true
+			candidates = append(candidates, p)
+		}
+	}
+	add(layout.RepoRoot)
+	add(layout.MainRepoRoot)
+	if real, err := filepath.EvalSymlinks(layout.RepoRoot); err == nil {
+		add(real)
+	}
+	return candidates
+}
+
+func countImportableMarkdown(dir, source string) int {
+	files, err := collectMarkdownFiles(dir, source)
+	if err != nil {
+		return 0
+	}
+	count := 0
+	for _, fullPath := range files {
+		raw, err := os.ReadFile(fullPath)
+		if err != nil {
+			continue
+		}
+		_, body, _ := memdir.ParseDocument(raw, filepath.Base(fullPath))
+		if strings.TrimSpace(guard.StripPrivate(body)) != "" {
+			count++
+		}
+	}
+	return count
+}
+
+func cleanPathKey(p string) string {
+	clean := filepath.Clean(p)
+	if abs, err := filepath.Abs(clean); err == nil {
+		clean = filepath.Clean(abs)
+	}
+	if runtime.GOOS == "windows" {
+		return strings.ToLower(clean)
+	}
+	return clean
 }

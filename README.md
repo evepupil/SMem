@@ -163,8 +163,11 @@ go build -o bin/smem.exe ./cmd/smem
 # 预览即将修改的配置文件（不写入磁盘）
 smem setup --dry-run
 
-# 自动探测本机已安装工具并安全接入
+# 自动探测本机已安装工具，并扫描默认目录引导一键导入已有记忆
 smem setup
+
+# 跳过交互确认直接导入扫到的默认原生记忆（或加 --no-import 跳过导入）
+smem setup --import
 
 # 查看各工具的探测与接入状态
 smem setup --status
@@ -178,23 +181,27 @@ smem setup --status
 | `--claude-mode native \| managed` | 默认 `native`（配置 `autoMemoryDirectory` 原生直连）；传入 `managed` 则禁用 Claude 原生 Auto Memory，统一经由 SMem MCP 管线 |
 | `--shared` | 在当前仓库创建 `.smem/.shared` 标记，直接绑定项目记忆到 `<repo>/.smem/memory/` 随仓库共享 |
 | `--project-rules` | 额外在项目根目录生成通用 `AGENTS.md` 与 `.agents/skills/smem/SKILL.md`（默认关闭，保持团队仓库 `git status` 干净） |
+| `--import` / `--no-import` | `--import` 跳过交互直接全导扫到的默认原生记忆；`--no-import` 跳过记忆扫描与引导导入 |
 | `--bin <路径>` | 显式指定写入工具配置的 `smem` 可执行文件路径 |
 | `--remove` | 安全移除 SMem 注入的 MCP、Hook 与规则块（**保留所有记忆文件**） |
 
 > **安全承诺**：首次修改任何外部配置文件前，SMem 会自动将原文件备份至 `~/.smem/backups/`。JSON/JSONC 解析保留其余键，TOML 采用 `# smem:start` / `# smem:end` 注释块维护，Markdown 采用 `<!-- smem:start -->` / `<!-- smem:end -->` 块维护。
 
-### 3. 导入既有原生记忆（可选）
+### 3. 引导导入与手动迁入已有记忆
 
-如果你此前已经在 Claude Code、Codex CLI 或 Cline 中积累了原生记忆，可一键预览并迁移进 SMem（自动执行密钥扫描与 `<private>` 剥离）：
+运行 `smem setup` 后会自动扫描默认目录（Claude Code 当前项目目录、Codex `memories`、Cline `memory-bank/`），统计条数并**默认全选**列出清单——输入编号可取消勾选、直接回车即可一键导入。若你的历史记忆存放在自定义路径或多账号目录（例如 `CLAUDE_CONFIG_DIR`），也可手动导入或直接绑定共用：
 
 ```sh
 smem import --from claude --dry-run
 smem import --from claude
 
-# 其他来源
-smem import --from codex --scope global
+# Codex CLI 默认归入 global（跨项目），自动跳过整库汇总大文件
+smem import --from codex
 smem import --from cline
 smem import --from dir --path ./notes --scope project
+
+# 或直接共用原目录，不建副本
+smem bind "<原有记忆目录>"
 ```
 
 ### 4. 日常跨工具接力示例
@@ -301,7 +308,7 @@ smem unbind [--json]
 smem sync [--remote <私有Git仓库URL>]
 
 # 工具接入、导入与协议入口
-smem setup [--dry-run] [--agents ...] [--claude-mode native|managed] [--shared] [--project-rules] [--status] [--remove] [--json]
+smem setup [--dry-run] [--agents ...] [--claude-mode native|managed] [--shared] [--project-rules] [--import | --no-import] [--status] [--remove] [--json]
 smem import --from claude|codex|cline|dir [--path 目录] [--scope project|global] [--dry-run] [--json]
 smem mcp
 smem hook <claude|codex|cursor|gemini> <session-start|prompt-submit|post-compact|before-agent> [--claude-mode native|managed]
