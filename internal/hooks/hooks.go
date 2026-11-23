@@ -77,15 +77,41 @@ func buildIndexInjection(store *memdir.Store, agent, claudeMode string) string {
 		scopeFilter = "global"
 	}
 
-	rendered, _, err := store.RenderCombinedIndex(scopeFilter)
+	rendered, idxRes, err := store.RenderCombinedIndex(scopeFilter)
 	if err != nil || strings.TrimSpace(rendered) == "" {
 		return ""
 	}
 
 	var b strings.Builder
 	b.WriteString("<smem-memory-index>\n")
-	b.WriteString("以下是 SMem 跨工具共享记忆目录（按需调用 MCP `memory_read` 读取正文；涉及代码/命令前请先核对当前源码）：\n\n")
+	b.WriteString("以下是 SMem 跨工具共享记忆目录（项目记忆请按触发说明主动调用 MCP `memory_read` 读取正文后再作答；涉及代码/命令前请先核对当前源码）：\n\n")
 	b.WriteString(rendered)
+
+	// Inline compact global preferences (up to 2KB total) so cross-project user preferences
+	// take effect on Turn 1 without requiring an extra MCP round-trip in every session.
+	if idxRes.Global != nil && len(idxRes.Global.Manifest) > 0 && len(idxRes.Global.Manifest) <= 10 {
+		var files []string
+		for _, m := range idxRes.Global.Manifest {
+			files = append(files, m.File)
+		}
+		if entries, err := store.Read(memdir.ScopeGlobal, files); err == nil {
+			var gb strings.Builder
+			totalBytes := 0
+			for _, e := range entries {
+				chunk := fmt.Sprintf("- **%s** (%s): %s\n", e.Name, e.File, strings.TrimSpace(e.Body))
+				if totalBytes+len(chunk) > 2048 {
+					break
+				}
+				gb.WriteString(chunk)
+				totalBytes += len(chunk)
+			}
+			if gb.Len() > 0 {
+				b.WriteString("\n\n### 全局个人偏好生效内容 (global)\n")
+				b.WriteString(strings.TrimSpace(gb.String()))
+			}
+		}
+	}
+
 	b.WriteString("\n</smem-memory-index>")
 	return b.String()
 }

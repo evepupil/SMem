@@ -256,6 +256,7 @@ func (s *Store) Write(req WriteRequest) (WriteResult, error) {
 	defer lock.Release()
 
 	targetFile := strings.TrimSpace(req.File)
+	oldFileToRemove := ""
 	status := "created"
 	var extraFields []ExtraField
 
@@ -278,6 +279,15 @@ func (s *Store) Write(req WriteRequest) (WriteResult, error) {
 			oldFM, _, _ := ParseDocument(existingRaw, targetFile)
 			extraFields = oldFM.Extra
 			status = "updated"
+
+			// If the title changed and the old filename was auto-derived from the old title,
+			// migrate to a fresh slug filename so obsolete values do not linger in the filename.
+			oldAutoSlug := guard.SlugifyFilename(string(oldFM.Type), oldFM.Name)
+			newAutoSlug := guard.SlugifyFilename(string(req.Type), name)
+			if targetFile == oldAutoSlug && newAutoSlug != targetFile {
+				oldFileToRemove = targetFile
+				targetFile = allocateUniqueFilename(dir, string(req.Type), name)
+			}
 		} else if !isNotExist(err) {
 			return WriteResult{}, err
 		}
@@ -326,6 +336,10 @@ func (s *Store) Write(req WriteRequest) (WriteResult, error) {
 	rendered := RenderDocument(fm, body)
 	if err := atomicWriteFile(fullPath, rendered, 0600); err != nil {
 		return WriteResult{}, err
+	}
+	if oldFileToRemove != "" && oldFileToRemove != targetFile {
+		_ = os.Remove(filepath.Join(dir, oldFileToRemove))
+		_ = removeIndexEntryLocked(dir, oldFileToRemove)
 	}
 
 	stats, err := upsertIndexEntryLocked(dir, req.Scope, targetFile, name, desc)

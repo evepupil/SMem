@@ -397,6 +397,10 @@ func planCodex(layout workspace.Layout, opts SetupOptions) ([]PlannedAction, err
 	}
 	actions = append(actions, a3)
 
+	// 4. User-level Codex Skill ($CODEX_HOME/skills/smem/SKILL.md)
+	skillPath := filepath.Join(codexHome, "skills", "smem", "SKILL.md")
+	actions = append(actions, planStaticFile("codex", "skill", skillPath, "安装 Codex SMem Agent Skill 规范", []byte(SkillMarkdown), 0644, opts.Remove))
+
 	return actions, nil
 }
 

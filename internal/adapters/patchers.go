@@ -100,6 +100,7 @@ func PatchCodexTOML(original []byte, smemBin string, remove bool) ([]byte, error
 		"[mcp_servers.smem]",
 		`command = "` + escapedBin + `"`,
 		`args = ["mcp"]`,
+		`env_vars = ["SMEM_HOME"]`,
 		"enabled = true",
 		tomlMarkerEnd,
 	}, newline)

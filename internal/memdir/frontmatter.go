@@ -126,6 +126,12 @@ func parseFrontmatterBlock(text string) (Frontmatter, string, bool) {
 		key := strings.TrimSpace(line[:colon])
 		rawVal := strings.TrimSpace(line[colon+1:])
 
+		// Skip empty mapping header lines (e.g. Claude Code 2.1+ "metadata:" parent key)
+		// while still parsing its indented child scalar fields like "  type: project".
+		if rawVal == "" && i+1 < len(headerLines) && (strings.HasPrefix(headerLines[i+1], " ") || strings.HasPrefix(headerLines[i+1], "\t")) {
+			continue
+		}
+
 		// Handle YAML block scalars (|, |-, >, >-)
 		var val string
 		if rawVal == "|" || rawVal == "|-" || rawVal == ">" || rawVal == ">-" {
