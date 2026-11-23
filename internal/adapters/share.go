@@ -44,8 +44,9 @@ func ShareStatus(layout workspace.Layout) (ShareStatusResult, error) {
 	if !layout.InProject {
 		return ShareStatusResult{}, errors.New("当前目录不在 Git 仓库中")
 	}
+	localDir := layout.ProjectDir()
 	res := ShareStatusResult{
-		LocalDir:   layout.ProjectLocalDir,
+		LocalDir:   localDir,
 		RepoDir:    layout.RepoSharedDir,
 		SharedMode: layout.SharedMode,
 	}
@@ -53,7 +54,7 @@ func ShareStatus(layout workspace.Layout) (ShareStatusResult, error) {
 		return res, nil
 	}
 
-	localFiles := listTopicFiles(layout.ProjectLocalDir)
+	localFiles := listTopicFiles(localDir)
 	repoFiles := listTopicFiles(layout.RepoSharedDir)
 
 	all := make(map[string]bool)
@@ -98,7 +99,7 @@ func SharePush(layout workspace.Layout, files []string, all bool, dryRun bool) (
 	if layout.SharedMode {
 		return ShareOpResult{}, errors.New("当前仓库已开启 --shared 直连模式，项目记忆本身就在 .smem/memory/ 中，无需再 push")
 	}
-	localFiles := listTopicFiles(layout.ProjectLocalDir)
+	localFiles := listTopicFiles(layout.ProjectDir())
 	targets, err := selectTargetFiles(localFiles, files, all)
 	if err != nil {
 		return ShareOpResult{}, err
@@ -157,7 +158,8 @@ func SharePull(layout workspace.Layout, files []string, all, force, dryRun bool)
 		return ShareOpResult{}, err
 	}
 
-	localFiles := listTopicFiles(layout.ProjectLocalDir)
+	localDir := layout.ProjectDir()
+	localFiles := listTopicFiles(localDir)
 	res := ShareOpResult{Direction: "pull", DryRun: dryRun}
 	for _, f := range targets {
 		rInfo := repoFiles[f]
@@ -172,10 +174,10 @@ func SharePull(layout workspace.Layout, files []string, all, force, dryRun bool)
 			}
 		}
 		if !dryRun {
-			if err := os.MkdirAll(layout.ProjectLocalDir, 0700); err != nil {
+			if err := os.MkdirAll(localDir, 0700); err != nil {
 				return ShareOpResult{}, err
 			}
-			dest := filepath.Join(layout.ProjectLocalDir, f)
+			dest := filepath.Join(localDir, f)
 			if _, err := backupAndWriteFile(layout.BackupsDir, dest, rInfo.raw, 0600); err != nil {
 				return ShareOpResult{}, err
 			}

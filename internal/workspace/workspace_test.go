@@ -108,3 +108,71 @@ func TestResolveOutsideGitAndHomeNotProject(t *testing.T) {
 		t.Fatalf("user home directory must not be treated as default project repo")
 	}
 }
+
+func TestProjectBindingResolutionPriorityAndRefresh(t *testing.T) {
+	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	smemHome := filepath.Join(home, ".smem")
+	repo := filepath.Join(tmp, "repo")
+	customDir := filepath.Join(tmp, "custom-memory")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(customDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	baseLayout, err := Resolve(ResolveOptions{HomeDir: home, SmemHome: smemHome, CWD: repo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if baseLayout.BoundDir != "" || baseLayout.ProjectDir() != baseLayout.ProjectLocalDir {
+		t.Fatalf("expected default ProjectLocalDir initially, got %+v", baseLayout)
+	}
+
+	boundPath, err := BindProject(smemHome, baseLayout.RepoID, customDir)
+	if err != nil {
+		t.Fatalf("BindProject failed: %v", err)
+	}
+	if boundPath != customDir {
+		t.Fatalf("expected bound path %q, got %q", customDir, boundPath)
+	}
+
+	resolved, err := Resolve(ResolveOptions{HomeDir: home, SmemHome: smemHome, CWD: repo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.BoundDir != customDir || resolved.ProjectDir() != customDir {
+		t.Fatalf("expected BoundDir %q active, got %+v", customDir, resolved)
+	}
+
+	// RefreshBinding should pick up changes dynamically on an existing Layout.
+	refreshed := RefreshBinding(baseLayout)
+	if refreshed.ProjectDir() != customDir {
+		t.Fatalf("expected RefreshBinding to pick up %q, got %q", customDir, refreshed.ProjectDir())
+	}
+
+	// SharedMode (.smem/.shared) takes precedence over BoundDir.
+	if err := EnableSharedMarker(repo); err != nil {
+		t.Fatal(err)
+	}
+	sharedLayout, err := Resolve(ResolveOptions{HomeDir: home, SmemHome: smemHome, CWD: repo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sharedLayout.SharedMode || sharedLayout.ProjectDir() != filepath.Join(repo, ".smem", "memory") {
+		t.Fatalf("expected SharedMode to take precedence over BoundDir, got %+v", sharedLayout)
+	}
+	if err := DisableSharedMarker(repo); err != nil {
+		t.Fatal(err)
+	}
+
+	existed, err := UnbindProject(smemHome, baseLayout.RepoID)
+	if err != nil || !existed {
+		t.Fatalf("expected UnbindProject existed=true, got existed=%v err=%v", existed, err)
+	}
+	afterUnbind := RefreshBinding(resolved)
+	if afterUnbind.BoundDir != "" || afterUnbind.ProjectDir() != afterUnbind.ProjectLocalDir {
+		t.Fatalf("expected ProjectLocalDir restored after unbind, got %+v", afterUnbind)
+	}
+}

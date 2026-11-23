@@ -25,17 +25,21 @@ type Layout struct {
 	MainRepoRoot    string // Primary repository root (shared across worktrees)
 	RepoID          string // Stable human-readable + hash identifier shared across worktrees
 	ProjectLocalDir string // ~/.smem/projects/<repo-id> (default, zero repo pollution)
+	BoundDir        string // Custom project memory dir bound via ~/.smem/config.json
 	RepoSharedDir   string // <repo-root>/.smem/memory (opt-in / selective sync target)
 	SharedMode      bool   // True when project directly reads/writes RepoSharedDir
 }
 
-// ProjectDir returns the active project memory directory (local by default, shared if opted in).
+// ProjectDir returns the active project memory directory (shared if opted in, else bound dir, else local default).
 func (l Layout) ProjectDir() string {
 	if !l.InProject {
 		return ""
 	}
 	if l.SharedMode {
 		return l.RepoSharedDir
+	}
+	if l.BoundDir != "" {
+		return l.BoundDir
 	}
 	return l.ProjectLocalDir
 }
@@ -110,6 +114,14 @@ func Resolve(opts ResolveOptions) (Layout, error) {
 		layout.ProjectLocalDir = filepath.Join(smemHome, "projects", repoID)
 		layout.RepoSharedDir = repoShared
 		layout.SharedMode = sharedMode
+
+		boundDir, boundOK, err := LookupProjectBinding(smemHome, repoID)
+		if err != nil {
+			return Layout{}, err
+		}
+		if boundOK {
+			layout.BoundDir = boundDir
+		}
 	}
 
 	return layout, nil

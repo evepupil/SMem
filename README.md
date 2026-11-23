@@ -38,7 +38,7 @@
 - **单一静态 Go 二进制（纯标准库，冷启动 < 5ms）**
   基于 Go 1.25 标准库编写，零第三方依赖，跨平台支持 Windows / macOS / Linux。生命周期 Hook 采用确定性逻辑（不调用 LLM），Fail-open 设计绝不阻塞主会话。
 - **2 层清晰作用域 + Git Worktree 自动共享**
-  - `project`：默认存储于 `~/.smem/projects/<repo-id>/`（按 Git `origin` URL 归一化或主仓库路径生成的稳定指纹），**默认零污染项目 Git 状态**，同一仓库的多个 Git Worktree 自动共享同一份记忆。
+  - `project`：默认存储于 `~/.smem/projects/<repo-id>/`（按 Git `origin` URL 归一化或主仓库路径生成的稳定指纹），**默认零污染项目 Git 状态**，同一仓库的多个 Git Worktree 自动共享同一份记忆；也可通过 `smem bind <目录>` 在 `~/.smem/config.json` 中为项目绑定任意自定义目录（例如现有 Claude Code 账号的 `memory` 目录）。
   - `global`：存储于 `~/.smem/global/`，保存跨项目的个人画像与通用工作习惯，目录本身可作为私有 Git 仓库通过 `smem sync` 跨设备同步。
 - **Claude Code 原生零损耗协同**
   - 默认采用 `native` 模式：通过 `.claude/settings.local.json` 的 `autoMemoryDirectory` 直连 SMem 项目目录（自动加入 `.git/info/exclude`），100% 保留 Claude Code 原生自动记忆、`extractMemories` 与 `/dream`，同时由 Hook 补齐 `global` 全局偏好；
@@ -292,6 +292,10 @@ smem search [--scope all|project|global] [--type ...] [--limit 8] [--json] <关�
 smem share status [--json]
 smem share push [--all] [--dry-run] [--json] [file...]
 smem share pull [--all] [--force] [--dry-run] [--json] [file...]
+
+# 自定义项目记忆目录绑定（记录于 ~/.smem/config.json）
+smem bind [--show] [--create] [--json] [<目录路径>]
+smem unbind [--json]
 
 # 个人全局记忆私有 Git 同步（~/.smem/global/）
 smem sync [--remote <私有Git仓库URL>]

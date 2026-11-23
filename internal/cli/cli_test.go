@@ -106,3 +106,78 @@ func TestCLIProjectWriteOutsideGitRefused(t *testing.T) {
 		t.Fatalf("global write outside Git repo failed: %v", err)
 	}
 }
+
+func TestCLIBindAndUnbindWorkflow(t *testing.T) {
+	tmp := t.TempDir()
+	home := filepath.Join(tmp, "home")
+	repo := filepath.Join(tmp, "repo")
+	if err := os.MkdirAll(filepath.Join(repo, ".git"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	layout, err := workspace.Resolve(workspace.ResolveOptions{HomeDir: home, CWD: repo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := func(l workspace.Layout, args ...string) (string, error) {
+		var out, errOut bytes.Buffer
+		err := Run(args, l, strings.NewReader(""), &out, &errOut)
+		return out.String(), err
+	}
+
+	missingDir := filepath.Join(tmp, "custom-mem")
+	if _, err := run(layout, "bind", missingDir); err == nil {
+		t.Fatalf("expected bind to fail when directory does not exist without --create")
+	}
+
+	// Regular file target must also be rejected.
+	fileTarget := filepath.Join(tmp, "not-a-dir.txt")
+	if err := os.WriteFile(fileTarget, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := run(layout, "bind", fileTarget); err == nil {
+		t.Fatalf("expected bind to fail when target path is a file")
+	}
+
+	if _, err := run(layout, "bind", "--create", missingDir); err != nil {
+		t.Fatalf("bind --create failed: %v", err)
+	}
+
+	boundLayout, err := workspace.Resolve(workspace.ResolveOptions{HomeDir: home, CWD: repo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	showOut, err := run(boundLayout, "bind", "--show", "--json")
+	if err != nil {
+		t.Fatalf("bind --show failed: %v", err)
+	}
+	var showRes struct {
+		Bound    bool   `json:"bound"`
+		BoundDir string `json:"bound_dir"`
+	}
+	if err := json.Unmarshal([]byte(showOut), &showRes); err != nil || !showRes.Bound || showRes.BoundDir != missingDir {
+		t.Fatalf("unexpected bind --show json: err=%v out=%s", err, showOut)
+	}
+
+	if _, err := run(boundLayout, "write", "--type", "project", "--name", "自定义目录约定", "写入绑定目录。"); err != nil {
+		t.Fatalf("write into bound dir failed: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(missingDir, "MEMORY.md")); err != nil {
+		t.Fatalf("expected MEMORY.md in bound dir %s: %v", missingDir, err)
+	}
+	if _, err := os.Stat(filepath.Join(boundLayout.ProjectLocalDir, "MEMORY.md")); !os.IsNotExist(err) {
+		t.Fatalf("did not expect MEMORY.md in default ProjectLocalDir when bound")
+	}
+
+	unbindOut, err := run(boundLayout, "unbind", "--json")
+	if err != nil {
+		t.Fatalf("unbind failed: %v", err)
+	}
+	var unbindRes struct {
+		Unbound    bool   `json:"unbound"`
+		ProjectDir string `json:"project_dir"`
+	}
+	if err := json.Unmarshal([]byte(unbindOut), &unbindRes); err != nil || !unbindRes.Unbound || unbindRes.ProjectDir != boundLayout.ProjectLocalDir {
+		t.Fatalf("unexpected unbind json: err=%v out=%s", err, unbindOut)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"smem/internal/adapters"
@@ -32,6 +33,8 @@ const usageText = `smem · 通用 AI 编程 Agent 统一记忆底座（Claude Co
   smem search [--scope all|project|global] [--type ...] [--limit 8] [--json] <关键词...>
   smem check [--scope all|project|global] [--fix] [--json]
   smem share status | push [--all] [--dry-run] [file...] | pull [--all] [--force] [--dry-run] [file...]
+  smem bind [--show] [--create] [--json] [<目录路径>]
+  smem unbind [--json]
   smem import --from claude|codex|cline|dir [--path 目录] [--scope project|global] [--dry-run] [--json]
   smem sync [--remote <私有Git仓库URL>]
   smem dream [--scope all|project|global]
@@ -72,6 +75,10 @@ func Run(args []string, layout workspace.Layout, in io.Reader, out, errOut io.Wr
 		return runCheck(args[1:], store, out, errOut)
 	case "share":
 		return runShare(args[1:], layout, out, errOut)
+	case "bind":
+		return runBind(args[1:], layout, out, errOut)
+	case "unbind":
+		return runUnbind(args[1:], layout, out, errOut)
 	case "import":
 		return runImport(args[1:], store, out, errOut)
 	case "sync":
@@ -110,6 +117,7 @@ func runSetup(args []string, layout workspace.Layout, out, errOut io.Writer) err
 				"in_project":  layout.InProject,
 				"repo_id":     layout.RepoID,
 				"project_dir": layout.ProjectDir(),
+				"bound_dir":   layout.BoundDir,
 				"global_dir":  layout.GlobalDir,
 				"shared_mode": layout.SharedMode,
 				"agents":      statuses,
@@ -120,6 +128,8 @@ func runSetup(args []string, layout workspace.Layout, out, errOut io.Writer) err
 			mode := "本机隔离（零污染仓库）"
 			if layout.SharedMode {
 				mode = "仓库直连共享 (.smem/memory)"
+			} else if layout.BoundDir != "" {
+				mode = "自定义绑定目录"
 			}
 			_, _ = fmt.Fprintf(out, "当前项目目录：%s [%s]\n\n", layout.ProjectDir(), mode)
 		} else {
@@ -522,6 +532,142 @@ func runShare(args []string, layout workspace.Layout, out, errOut io.Writer) err
 	default:
 		return fmt.Errorf("未知 share 子命令 %q（支持 status、push、pull）", sub)
 	}
+}
+
+func runBind(args []string, layout workspace.Layout, out, errOut io.Writer) error {
+	fs := flag.NewFlagSet("smem bind", flag.ContinueOnError)
+	fs.SetOutput(errOut)
+	show := fs.Bool("show", false, "查看当前项目的记忆目录绑定状态")
+	create := fs.Bool("create", false, "目标目录不存在时自动创建")
+	asJSON := fs.Bool("json", false, "输出 JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if !layout.InProject {
+		return errors.New("当前目录不在 Git 仓库中，无法绑定项目记忆目录")
+	}
+
+	configPath := workspace.ConfigPath(layout.SmemHome)
+	if *show || fs.NArg() == 0 {
+		if *asJSON {
+			return writeJSON(out, map[string]any{
+				"repo_id":     layout.RepoID,
+				"bound":       layout.BoundDir != "",
+				"bound_dir":   layout.BoundDir,
+				"project_dir": layout.ProjectDir(),
+				"default_dir": layout.ProjectLocalDir,
+				"shared_mode": layout.SharedMode,
+				"config_path": configPath,
+			})
+		}
+		_, _ = fmt.Fprintf(out, "项目 ID：%s\n", layout.RepoID)
+		_, _ = fmt.Fprintf(out, "当前生效目录：%s\n", layout.ProjectDir())
+		if layout.BoundDir != "" {
+			_, _ = fmt.Fprintf(out, "自定义绑定：%s\n", layout.BoundDir)
+		} else {
+			_, _ = fmt.Fprintln(out, "自定义绑定：（未设置）")
+		}
+		_, _ = fmt.Fprintf(out, "默认目录：%s\n", layout.ProjectLocalDir)
+		if layout.SharedMode {
+			_, _ = fmt.Fprintln(out, "提示：当前仓库存在 .smem/.shared，直连共享模式优先级高于自定义绑定。")
+		}
+		_, _ = fmt.Fprintf(out, "配置文件：%s\n", configPath)
+		return nil
+	}
+	if fs.NArg() > 1 {
+		return errors.New("用法：smem bind [--show] [--create] [--json] [<目录路径>]")
+	}
+
+	target := strings.TrimSpace(fs.Arg(0))
+	absDir, err := filepath.Abs(target)
+	if err != nil {
+		return fmt.Errorf("解析目录路径失败：%w", err)
+	}
+	absDir = filepath.Clean(absDir)
+
+	info, err := os.Stat(absDir)
+	switch {
+	case err == nil && !info.IsDir():
+		return fmt.Errorf("目标路径 %s 是普通文件，请提供目录路径", absDir)
+	case errors.Is(err, os.ErrNotExist):
+		if !*create {
+			return fmt.Errorf("目标目录 %s 不存在；请先确认路径是否正确，或附加 --create 自动创建", absDir)
+		}
+		if mkErr := os.MkdirAll(absDir, 0700); mkErr != nil {
+			return fmt.Errorf("创建目录 %s 失败：%w", absDir, mkErr)
+		}
+	case err != nil:
+		return fmt.Errorf("检查目标目录失败：%w", err)
+	}
+
+	boundDir, err := workspace.BindProject(layout.SmemHome, layout.RepoID, absDir)
+	if err != nil {
+		return err
+	}
+	defaultHasFiles := !strings.EqualFold(filepath.Clean(boundDir), filepath.Clean(layout.ProjectLocalDir)) && dirHasFiles(layout.ProjectLocalDir)
+
+	if *asJSON {
+		return writeJSON(out, map[string]any{
+			"bound":                   true,
+			"repo_id":                 layout.RepoID,
+			"bound_dir":               boundDir,
+			"default_dir":             layout.ProjectLocalDir,
+			"shared_mode":             layout.SharedMode,
+			"default_dir_has_entries": defaultHasFiles,
+			"config_path":             configPath,
+		})
+	}
+
+	_, _ = fmt.Fprintf(out, "已绑定项目记忆目录：%s -> %s\n", layout.RepoID, boundDir)
+	_, _ = fmt.Fprintf(out, "配置文件：%s\n", configPath)
+	if layout.SharedMode {
+		_, _ = fmt.Fprintln(out, "提示：当前仓库存在 .smem/.shared，直连共享模式优先级高于自定义绑定。")
+	}
+	if defaultHasFiles {
+		_, _ = fmt.Fprintf(out, "提示：默认目录（%s）中仍有文件；绑定生效后该默认目录不再被读写，可按需手动清理。\n", layout.ProjectLocalDir)
+	}
+	return nil
+}
+
+func runUnbind(args []string, layout workspace.Layout, out, errOut io.Writer) error {
+	fs := flag.NewFlagSet("smem unbind", flag.ContinueOnError)
+	fs.SetOutput(errOut)
+	asJSON := fs.Bool("json", false, "输出 JSON")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if !layout.InProject {
+		return errors.New("当前目录不在 Git 仓库中，无法解除绑定")
+	}
+
+	existed, err := workspace.UnbindProject(layout.SmemHome, layout.RepoID)
+	if err != nil {
+		return err
+	}
+	restored := layout
+	restored.BoundDir = ""
+	activeDir := restored.ProjectDir()
+
+	if *asJSON {
+		return writeJSON(out, map[string]any{
+			"unbound":     existed,
+			"repo_id":     layout.RepoID,
+			"project_dir": activeDir,
+			"config_path": workspace.ConfigPath(layout.SmemHome),
+		})
+	}
+	if existed {
+		_, _ = fmt.Fprintf(out, "已解除 %s 的自定义记忆目录绑定。\n", layout.RepoID)
+	} else {
+		_, _ = fmt.Fprintf(out, "项目 %s 当前未设置自定义绑定。\n", layout.RepoID)
+	}
+	_, _ = fmt.Fprintf(out, "当前生效目录：%s\n", activeDir)
+	return nil
+}
+
+func dirHasFiles(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	return err == nil && len(entries) > 0
 }
 
 func runImport(args []string, store *memdir.Store, out, errOut io.Writer) error {

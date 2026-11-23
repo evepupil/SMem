@@ -40,6 +40,12 @@ func NewServer(store *memdir.Store) *Server {
 func (s *Server) storeForWorkspace(ws string) (*memdir.Store, error) {
 	ws = strings.TrimSpace(ws)
 	if ws == "" {
+		refreshed := workspace.RefreshBinding(s.Store.Layout)
+		if refreshed.BoundDir != s.Store.Layout.BoundDir {
+			st := memdir.NewStore(refreshed)
+			st.Now = s.Store.Now
+			return st, nil
+		}
 		return s.Store, nil
 	}
 	layout, err := workspace.Resolve(workspace.ResolveOptions{
@@ -426,7 +432,11 @@ func (s *Server) handleResourceRead(req rpcRequest) rpcResponse {
 	if params.URI != "smem://index" {
 		return errResp(req.ID, -32602, "unknown resource URI: "+params.URI)
 	}
-	rendered, _, err := s.Store.RenderCombinedIndex("all")
+	st, err := s.storeForWorkspace("")
+	if err != nil {
+		return errResp(req.ID, -32603, err.Error())
+	}
+	rendered, _, err := st.RenderCombinedIndex("all")
 	if err != nil {
 		return errResp(req.ID, -32603, err.Error())
 	}
@@ -459,7 +469,11 @@ func (s *Server) handlePromptGet(req rpcRequest) rpcResponse {
 	if scopeFilter == "" {
 		scopeFilter = "all"
 	}
-	report, _ := s.Store.Check(scopeFilter, false)
+	st, err := s.storeForWorkspace("")
+	if err != nil {
+		return errResp(req.ID, -32603, err.Error())
+	}
+	report, _ := st.Check(scopeFilter, false)
 	var extra strings.Builder
 	extra.WriteString(DreamPromptText)
 	extra.WriteString(fmt.Sprintf("\n\n当前整理目标作用域：%s（当前预检发现 %d 项提示）。", scopeFilter, len(report.Issues)))
