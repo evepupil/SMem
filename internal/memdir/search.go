@@ -212,15 +212,20 @@ func (s *Store) Search(opts SearchOptions) ([]SearchMatch, error) {
 	var matches []SearchMatch
 	for i := range docs {
 		d := &docs[i]
-		bm25Score, matchedCount := scoreDocBM25F(d, qTokens, docFreq, docCount, avgFieldLen)
-		phraseBoost := scoreExactPhrase(d, phraseProbe)
+		bm25Score, matchedCount, titleOrFile := scoreDocBM25F(d, qTokens, docFreq, docCount, avgFieldLen)
+		phraseBoost, phraseTitleOrFile := scoreExactPhrase(d, phraseProbe)
 
 		if bm25Score <= 0 && phraseBoost <= 0 {
 			continue
 		}
 
+		coverage := 0.0
+		if len(qTokens) > 0 {
+			coverage = float64(matchedCount) / float64(len(qTokens))
+		} else if phraseBoost > 0 {
+			coverage = 1.0
+		}
 		if len(qTokens) > 1 && matchedCount > 1 {
-			coverage := float64(matchedCount) / float64(len(qTokens))
 			bm25Score *= (1.0 + 0.25*coverage)
 		}
 
@@ -235,16 +240,18 @@ func (s *Store) Search(opts SearchOptions) ([]SearchMatch, error) {
 		}
 
 		matches = append(matches, SearchMatch{
-			Scope:        d.scope,
-			File:         d.file,
-			Name:         d.fm.Name,
-			Description:  d.fm.Description,
-			Type:         d.fm.Type,
-			Snippet:      extractSnippet(d.body, qTokens, phraseProbe),
-			Score:        score,
-			ETag:         d.etag,
-			Age:          d.ageLabel,
-			StaleWarning: d.staleWarn,
+			Scope:          d.scope,
+			File:           d.file,
+			Name:           d.fm.Name,
+			Description:    d.fm.Description,
+			Type:           d.fm.Type,
+			Snippet:        extractSnippet(d.body, qTokens, phraseProbe),
+			Score:          score,
+			TokenCoverage:  coverage,
+			TitleOrFileHit: titleOrFile || phraseTitleOrFile,
+			ETag:           d.etag,
+			Age:            d.ageLabel,
+			StaleWarning:   d.staleWarn,
 		})
 	}
 
@@ -273,17 +280,21 @@ func docHasTerm(d *indexedSearchDoc, term string) bool {
 	return false
 }
 
-func scoreDocBM25F(d *indexedSearchDoc, qTokens []string, docFreq map[string]int, docCount int, avgFieldLen [fieldCount]float64) (float64, int) {
+func scoreDocBM25F(d *indexedSearchDoc, qTokens []string, docFreq map[string]int, docCount int, avgFieldLen [fieldCount]float64) (float64, int, bool) {
 	if len(qTokens) == 0 {
-		return 0, 0
+		return 0, 0, false
 	}
 	total := 0.0
 	matched := 0
+	titleOrFile := false
 
 	for _, tok := range qTokens {
 		df := docFreq[tok]
 		if df <= 0 {
 			continue
+		}
+		if d.fieldTF[fieldName][tok] > 0 || d.fieldTF[fieldFile][tok] > 0 {
+			titleOrFile = true
 		}
 		idf := math.Log(1.0 + (float64(docCount)-float64(df)+0.5)/(float64(df)+0.5))
 		pseudoTF := 0.0
@@ -304,27 +315,30 @@ func scoreDocBM25F(d *indexedSearchDoc, qTokens []string, docFreq map[string]int
 			total += idf * (pseudoTF * (bm25K1 + 1.0)) / (bm25K1 + pseudoTF)
 		}
 	}
-	return total, matched
+	return total, matched, titleOrFile
 }
 
-func scoreExactPhrase(d *indexedSearchDoc, phrase string) float64 {
+func scoreExactPhrase(d *indexedSearchDoc, phrase string) (float64, bool) {
 	if len([]rune(phrase)) < 2 {
-		return 0
+		return 0, false
 	}
 	score := 0.0
+	titleOrFile := false
 	if strings.Contains(d.nameLower, phrase) {
 		score += 4.5
+		titleOrFile = true
 	}
 	if strings.Contains(d.descLower, phrase) {
 		score += 3.2
 	}
 	if strings.Contains(d.fileLower, phrase) {
 		score += 2.0
+		titleOrFile = true
 	}
 	if strings.Contains(d.bodyLower, phrase) {
 		score += 1.8
 	}
-	return score
+	return score, titleOrFile
 }
 
 func cleanPhraseProbe(qLower string) string {

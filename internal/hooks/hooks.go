@@ -10,7 +10,7 @@ import (
 	"smem/internal/workspace"
 )
 
-const minOverflowRescueScore = 1.6
+const minOverflowRescueScore = 3.2
 
 // Options configures a hook invocation.
 type Options struct {
@@ -192,7 +192,7 @@ func buildPromptSubmitContext(store *memdir.Store, agent, claudeMode, prompt str
 			hits, _ := store.Search(memdir.SearchOptions{Query: queryText, Limit: 8})
 			var rescued []memdir.SearchMatch
 			for _, h := range hits {
-				if h.Score < minOverflowRescueScore {
+				if !isHighConfidenceRescue(h) {
 					continue
 				}
 				if visible[string(h.Scope)+"/"+h.File] {
@@ -226,6 +226,16 @@ func hasHiddenMemories(res memdir.IndexResult) bool {
 		return true
 	}
 	return false
+}
+
+func isHighConfidenceRescue(h memdir.SearchMatch) bool {
+	if h.Score < minOverflowRescueScore {
+		return false
+	}
+	if h.TokenCoverage >= 0.45 {
+		return true
+	}
+	return h.TitleOrFileHit && h.TokenCoverage >= 0.25
 }
 
 func collectVisibleRootFiles(res memdir.IndexResult) map[string]bool {

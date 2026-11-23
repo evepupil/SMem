@@ -259,4 +259,16 @@ func TestIntentNoiseReductionAndHubSubMemoryRescue(t *testing.T) {
 	if strings.Contains(promptOut.String(), "db-hub.md") {
 		t.Fatalf("root-visible Hub entry db-hub.md should not be duplicated in overflow rescue:\n%s", promptOut.String())
 	}
+
+	// Unrelated coding prompt must return empty {} even when hidden Hub sub-memories exist.
+	var quietOut bytes.Buffer
+	quietPayload, _ := json.Marshal(map[string]any{
+		"prompt": "帮我把这个本地接口改成异步函数",
+	})
+	if err := Handle(store, Options{Agent: "codex", Event: "prompt-submit"}, bytes.NewReader(quietPayload), &quietOut); err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(quietOut.String()) != "{}" {
+		t.Fatalf("expected {} for unrelated coding prompt with weak partial overlap, got:\n%s", quietOut.String())
+	}
 }

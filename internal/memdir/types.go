@@ -184,16 +184,18 @@ type SearchOptions struct {
 
 // SearchMatch represents a ranked search hit.
 type SearchMatch struct {
-	Scope        Scope      `json:"scope"`
-	File         string     `json:"file"`
-	Name         string     `json:"name"`
-	Description  string     `json:"description"`
-	Type         MemoryType `json:"type"`
-	Snippet      string     `json:"snippet"`
-	Score        float64    `json:"score"`
-	ETag         string     `json:"etag"`
-	Age          string     `json:"age"`
-	StaleWarning string     `json:"stale_warning,omitempty"`
+	Scope          Scope      `json:"scope"`
+	File           string     `json:"file"`
+	Name           string     `json:"name"`
+	Description    string     `json:"description"`
+	Type           MemoryType `json:"type"`
+	Snippet        string     `json:"snippet"`
+	Score          float64    `json:"score"`
+	TokenCoverage  float64    `json:"token_coverage,omitempty"`
+	TitleOrFileHit bool       `json:"title_or_file_hit,omitempty"`
+	ETag           string     `json:"etag"`
+	Age            string     `json:"age"`
+	StaleWarning   string     `json:"stale_warning,omitempty"`
 }
 
 // CheckIssue describes a single health diagnostic finding.
