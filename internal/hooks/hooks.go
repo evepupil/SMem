@@ -10,6 +10,8 @@ import (
 	"smem/internal/workspace"
 )
 
+const minOverflowRescueScore = 1.6
+
 // Options configures a hook invocation.
 type Options struct {
 	Agent      string // claude, codex, cursor, gemini, antigravity
@@ -180,29 +182,77 @@ func buildPromptSubmitContext(store *memdir.Store, agent, claudeMode, prompt str
 		blocks = append(blocks, "<smem-hint>检测到用户要求更正或忘掉某条已有记忆：请先调用 `memory_index` / `memory_search` 找到确切文件，再用 `memory_read` 获取最新 etag，然后调用 `memory_write`（仅保留现行结论、不留旧值）或 `memory_delete`。</smem-hint>")
 	}
 
-	// If MEMORY.md is truncated (>200 lines) and the user prompt matches entries beyond the index,
-	// rescue them with compact pointers.
-	if strings.TrimSpace(prompt) != "" {
-		_, idxRes, err := store.RenderCombinedIndex("all")
-		if err == nil {
-			truncated := (idxRes.Project != nil && idxRes.Project.Truncated) ||
-				(idxRes.Global != nil && idxRes.Global.Truncated)
-			if truncated {
-				hits, _ := store.Search(memdir.SearchOptions{Query: prompt, Limit: 3})
-				if len(hits) > 0 {
-					var hb strings.Builder
-					hb.WriteString("<smem-overflow-hits>索引超限补召回（可调用 `memory_read` 查看）：\n")
-					for _, h := range hits {
-						hb.WriteString(fmt.Sprintf("- [%s] %s — %s (%s)\n", h.Scope, h.File, h.Name, h.Description))
-					}
-					hb.WriteString("</smem-overflow-hits>")
-					blocks = append(blocks, hb.String())
+	// Rescue hidden entries (either truncated past 200-line/25KB cap OR tucked inside Level-2 Hub files)
+	// that are NOT already visible in the root MEMORY.md index!
+	queryText := extractCleanQuery(prompt, 240)
+	if queryText != "" {
+		idxRes, err := store.Index("all")
+		if err == nil && hasHiddenMemories(idxRes) {
+			visible := collectVisibleRootFiles(idxRes)
+			hits, _ := store.Search(memdir.SearchOptions{Query: queryText, Limit: 8})
+			var rescued []memdir.SearchMatch
+			for _, h := range hits {
+				if h.Score < minOverflowRescueScore {
+					continue
 				}
+				if visible[string(h.Scope)+"/"+h.File] {
+					continue
+				}
+				rescued = append(rescued, h)
+				if len(rescued) >= 3 {
+					break
+				}
+			}
+			if len(rescued) > 0 {
+				var hb strings.Builder
+				hb.WriteString("<smem-overflow-hits>关联二级子记忆/折叠条目补召回（可按需调用 `memory_read` 查看全文）：\n")
+				for _, h := range rescued {
+					hb.WriteString(fmt.Sprintf("- [%s] %s — %s (%s)\n", h.Scope, h.File, h.Name, h.Description))
+				}
+				hb.WriteString("</smem-overflow-hits>")
+				blocks = append(blocks, hb.String())
 			}
 		}
 	}
 
 	return strings.Join(blocks, "\n\n")
+}
+
+func hasHiddenMemories(res memdir.IndexResult) bool {
+	if res.Project != nil && (res.Project.Truncated || res.Project.SubIndexedCount > 0) {
+		return true
+	}
+	if res.Global != nil && (res.Global.Truncated || res.Global.SubIndexedCount > 0) {
+		return true
+	}
+	return false
+}
+
+func collectVisibleRootFiles(res memdir.IndexResult) map[string]bool {
+	visible := make(map[string]bool)
+	addScope := func(idx *memdir.ScopeIndex) {
+		if idx == nil || strings.TrimSpace(idx.IndexContent) == "" {
+			return
+		}
+		for _, f := range memdir.ExtractLinkedFiles(idx.IndexContent) {
+			visible[string(idx.Scope)+"/"+f] = true
+		}
+	}
+	addScope(res.Global)
+	addScope(res.Project)
+	return visible
+}
+
+func extractCleanQuery(prompt string, maxRunes int) string {
+	cleaned := strings.TrimSpace(stripFencedCode(prompt))
+	if cleaned == "" {
+		return ""
+	}
+	runes := []rune(cleaned)
+	if len(runes) > maxRunes {
+		cleaned = string(runes[:maxRunes])
+	}
+	return cleaned
 }
 
 // MemoryIntent classifies explicit durable memory cues in a user prompt.
@@ -219,37 +269,98 @@ var (
 		"这一次", "这次先", "仅本次", "临时用", "先临时",
 		"just this once", "for this time only", "temporarily",
 	}
-	updateForgetCues = []string{
-		"忘掉", "忘记", "删掉这条记忆", "删除这条记忆", "不再由", "改由", "改成", "换成了", "更新约定", "纠正一下",
-		"forget that", "forget the", "remove memory", "delete memory", "update memory", "instead of",
+	memoryContextNouns = []string{
+		"记忆", "规矩", "规范", "约定", "原则", "习惯", "偏好", "铁律",
+		"memory", "memories", "convention", "preference",
 	}
-	writeCues = []string{
-		"记住", "记一下", "以后都", "以后这个项目", "以后所有项目", "以后每次", "每次都", "每次开工", "不要再", "别再", "永远", "长期约定", "统一用", "所有项目都",
-		"remember that", "remember to", "from now on", "always use", "never use", "for all projects", "save this to memory", "keep in mind",
+	strongUpdateForgetCues = []string{
+		"忘掉", "忘记", "删掉这条记忆", "删除这条记忆", "删掉记忆", "删除记忆",
+		"更新记忆", "修改记忆", "更正记忆", "不再由", "改由", "更新约定", "纠正一下这条",
+		"forget that", "forget the", "remove memory", "delete memory", "update memory",
+	}
+	contextualUpdateCues = []string{
+		"改成", "换成了", "改为", "更正为", "instead of",
+	}
+	strongWriteCues = []string{
+		"记住", "记一下", "记进记忆", "写入记忆", "存进记忆", "保存到记忆",
+		"以后都", "以后这个项目", "以后所有项目", "以后每次", "每次开工",
+		"长期约定", "所有项目都", "从现在起",
+		"remember that", "remember to", "from now on", "for all projects", "save this to memory", "keep in mind",
+	}
+	contextualWriteCues = []string{
+		"不要再", "别再", "永远", "统一用", "每次都", "always use", "never use",
 	}
 )
 
-// DetectMemoryIntent detects explicit user signals for persisting, correcting, or forgetting memory
-// while avoiding false positives on explicit one-off instructions.
+// DetectMemoryIntent detects explicit user signals for persisting, correcting, or forgetting memory.
+// Strips fenced and inline code first and requires memory/rule context for ambiguous verbs like "改成" or "统一用".
 func DetectMemoryIntent(prompt string) MemoryIntent {
-	p := strings.TrimSpace(prompt)
-	if p == "" {
+	cleaned := strings.TrimSpace(stripInlineCode(stripFencedCode(prompt)))
+	if cleaned == "" {
 		return IntentNone
 	}
-	lower := strings.ToLower(p)
+	lower := strings.ToLower(cleaned)
 
-	// Explicit one-off instruction overrides write cues unless user also says "记住/以后".
 	isOneOff := containsAny(lower, oneOffCues)
-	if containsAny(lower, updateForgetCues) {
+	hasMemContext := containsAny(lower, memoryContextNouns)
+
+	if containsAny(lower, strongUpdateForgetCues) || (hasMemContext && containsAny(lower, contextualUpdateCues)) {
 		return IntentUpdateOrForget
 	}
-	if containsAny(lower, writeCues) {
-		if isOneOff && !strings.Contains(lower, "记住") && !strings.Contains(lower, "以后") && !strings.Contains(lower, "remember") {
+
+	hasPersistentScope := strings.Contains(lower, "以后") || strings.Contains(lower, "所有会话") || strings.Contains(lower, "每个项目")
+	if containsAny(lower, strongWriteCues) || ((hasMemContext || hasPersistentScope) && containsAny(lower, contextualWriteCues)) {
+		if isOneOff && !strings.Contains(lower, "记住") && !strings.Contains(lower, "以后") && !strings.Contains(lower, "remember") && !strings.Contains(lower, "from now on") {
 			return IntentNone
 		}
 		return IntentWrite
 	}
 	return IntentNone
+}
+
+func stripFencedCode(s string) string {
+	lines := strings.Split(s, "\n")
+	var out []string
+	inFence := false
+	fenceMarker := ""
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
+			marker := trimmed[:3]
+			if !inFence {
+				inFence = true
+				fenceMarker = marker
+				continue
+			}
+			if marker == fenceMarker {
+				inFence = false
+				fenceMarker = ""
+				continue
+			}
+		}
+		if !inFence {
+			out = append(out, line)
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
+func stripInlineCode(s string) string {
+	var b strings.Builder
+	inTick := false
+	for _, r := range s {
+		if r == '`' {
+			inTick = !inTick
+			if !inTick {
+				b.WriteRune(' ')
+			}
+			continue
+		}
+		if !inTick {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func containsAny(text string, phrases []string) bool {

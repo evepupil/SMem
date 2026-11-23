@@ -293,6 +293,9 @@ func (s *Server) callRead(raw json.RawMessage) (string, error) {
 		b.WriteString(fmt.Sprintf("### %s (%s/%s)\n", e.Name, e.Scope, e.File))
 		b.WriteString(fmt.Sprintf("- type: `%s` | age: `%s` | etag: `%s`\n", e.Type, e.Age, e.ETag))
 		b.WriteString(fmt.Sprintf("- description: %s\n", e.Description))
+		if len(e.LinkedFiles) > 0 {
+			b.WriteString(fmt.Sprintf("- 关联子记忆（可按需传给 memory_read）：`%s`\n", strings.Join(e.LinkedFiles, "`, `")))
+		}
 		if e.StaleWarning != "" {
 			b.WriteString("> ⚠ " + e.StaleWarning + "\n")
 		}

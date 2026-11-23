@@ -98,6 +98,7 @@ type Entry struct {
 	StaleWarning string     `json:"stale_warning,omitempty"`
 	Indexed      bool       `json:"indexed"`
 	HasHeader    bool       `json:"has_frontmatter"`
+	LinkedFiles  []string   `json:"linked_files,omitempty"`
 }
 
 // ManifestItem is the lightweight frontmatter-only representation of a memory file.
@@ -111,23 +112,25 @@ type ManifestItem struct {
 	Age         string     `json:"age"`
 	AgeDays     int        `json:"age_days"`
 	Indexed     bool       `json:"indexed"`
+	SubIndexed  bool       `json:"sub_indexed,omitempty"`
 }
 
 // ScopeIndex holds the rendered MEMORY.md index and manifest diagnostics for one scope.
 type ScopeIndex struct {
-	Scope         Scope          `json:"scope"`
-	Dir           string         `json:"dir"`
-	Exists        bool           `json:"exists"`
-	IndexContent  string         `json:"index_content"`
-	TotalLines    int            `json:"total_lines"`
-	TotalBytes    int            `json:"total_bytes"`
-	Truncated     bool           `json:"truncated"`
-	OmittedLines  int            `json:"omitted_lines,omitempty"`
-	Warning       string         `json:"warning,omitempty"`
-	Unindexed     []ManifestItem `json:"unindexed,omitempty"`
-	BrokenLinks   []string       `json:"broken_links,omitempty"`
-	Manifest      []ManifestItem `json:"manifest,omitempty"`
-	TopicCount    int            `json:"topic_count"`
+	Scope           Scope          `json:"scope"`
+	Dir             string         `json:"dir"`
+	Exists          bool           `json:"exists"`
+	IndexContent    string         `json:"index_content"`
+	TotalLines      int            `json:"total_lines"`
+	TotalBytes      int            `json:"total_bytes"`
+	Truncated       bool           `json:"truncated"`
+	OmittedLines    int            `json:"omitted_lines,omitempty"`
+	Warning         string         `json:"warning,omitempty"`
+	SubIndexedCount int            `json:"sub_indexed_count,omitempty"`
+	Unindexed       []ManifestItem `json:"unindexed,omitempty"`
+	BrokenLinks     []string       `json:"broken_links,omitempty"`
+	Manifest        []ManifestItem `json:"manifest,omitempty"`
+	TopicCount      int            `json:"topic_count"`
 }
 
 // IndexResult aggregates global and project indexes.

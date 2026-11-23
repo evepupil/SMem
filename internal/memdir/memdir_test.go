@@ -333,3 +333,151 @@ func TestConcurrentWritesSafe(t *testing.T) {
 			idxRes.Project.TopicCount, len(idxRes.Project.Unindexed))
 	}
 }
+
+func TestHubWikiLinksAndRebuildPreservesSubMemories(t *testing.T) {
+	store, layout := newTestStore(t)
+	dir := layout.ProjectDir()
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	mustWrite := func(file string, fm Frontmatter, body string) {
+		t.Helper()
+		raw := RenderDocument(fm, body)
+		if err := os.WriteFile(filepath.Join(dir, file), raw, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mustWrite("dev-hub.md", Frontmatter{
+		Name:        "3333 故障汇总",
+		Description: "本地 dev 服务器故障入口",
+		Type:        TypeReference,
+	}, "汇总入口：\n- [[sub-crash|无声退出]]\n- [缓存死循环](sub-cache.md#clean)\n")
+
+	mustWrite("sub-crash.md", Frontmatter{
+		Name:        "无声硬崩",
+		Description: "0xC0000005 崩溃处理",
+		Type:        TypeProject,
+	}, "固定能效核即可规避。")
+
+	mustWrite("sub-cache.md", Frontmatter{
+		Name:        "缓存死循环",
+		Description: ".next 缓存损坏",
+		Type:        TypeProject,
+	}, "清理 .next 重新启动。")
+
+	mustWrite("true-orphan.md", Frontmatter{
+		Name:        "未挂接笔记",
+		Description: "没有任何链接指向",
+		Type:        TypeProject,
+	}, "这是一条孤儿笔记。")
+
+	indexRaw := "# Project Memory Index\n\n- [3333 故障汇总](dev-hub.md) — 本地 dev 服务器故障入口\n"
+	if err := os.WriteFile(filepath.Join(dir, IndexFileName), []byte(indexRaw), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	rendered, idxRes, err := store.RenderCombinedIndex("project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if idxRes.Project.SubIndexedCount != 2 {
+		t.Fatalf("expected 2 sub-indexed Hub files, got %d", idxRes.Project.SubIndexedCount)
+	}
+	if len(idxRes.Project.Unindexed) != 1 || idxRes.Project.Unindexed[0].File != "true-orphan.md" {
+		t.Fatalf("expected only true-orphan.md in Unindexed, got %+v", idxRes.Project.Unindexed)
+	}
+	if strings.Contains(rendered, "sub-crash.md") || strings.Contains(rendered, "sub-cache.md") {
+		t.Fatalf("sub-indexed Hub children must not bloat rendered root index:\n%s", rendered)
+	}
+
+	// Reading Hub file exposes resolved child filenames.
+	entries, err := store.Read(ScopeProject, []string{"dev-hub.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries[0].LinkedFiles) != 2 {
+		t.Fatalf("expected 2 linked child files on hub Read, got %+v", entries[0].LinkedFiles)
+	}
+
+	// Check(fix=true) indexes true-orphan.md into MEMORY.md while keeping sub-crash & sub-cache archived under dev-hub.md!
+	report, err := store.Check("project", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Fixed {
+		t.Fatalf("expected Check(fix=true) to repair true-orphan.md")
+	}
+	rebuiltBytes, err := os.ReadFile(filepath.Join(dir, IndexFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rebuiltStr := string(rebuiltBytes)
+	if !strings.Contains(rebuiltStr, "dev-hub.md") || !strings.Contains(rebuiltStr, "true-orphan.md") {
+		t.Fatalf("rebuilt MEMORY.md missing root entries:\n%s", rebuiltStr)
+	}
+	if strings.Contains(rebuiltStr, "sub-crash.md") || strings.Contains(rebuiltStr, "sub-cache.md") {
+		t.Fatalf("rebuilt MEMORY.md flattened Hub children instead of preserving hierarchy:\n%s", rebuiltStr)
+	}
+}
+
+func TestPriorityTruncationPreservesBottomFeedbackAndPinned(t *testing.T) {
+	var b strings.Builder
+	b.WriteString("# Project Memory Index\n\n")
+	typeByFile := make(map[string]MemoryType)
+	for i := 1; i <= 210; i++ {
+		f := fmt.Sprintf("proj_%d.md", i)
+		typeByFile[f] = TypeProject
+		b.WriteString(fmt.Sprintf("- [普通条目 %d](%s) — 一般说明 %d\n", i, f, i))
+	}
+	typeByFile["fb_tail.md"] = TypeFeedback
+	b.WriteString("- [尾部纠错规矩](fb_tail.md) — 提交前跑门禁\n")
+	typeByFile["pinned_tail.md"] = TypeProject
+	b.WriteString("- [只开一台共用服务器（必须记）](pinned_tail.md) — 固定 3333 端口\n")
+
+	bounded, truncated, omitted := truncateIndexWithPriority(b.String(), typeByFile, MaxIndexLines, MaxIndexBytes)
+	if !truncated || omitted <= 0 {
+		t.Fatalf("expected truncation, got truncated=%v omitted=%d", truncated, omitted)
+	}
+	if !strings.Contains(bounded, "fb_tail.md") || !strings.Contains(bounded, "pinned_tail.md") {
+		t.Fatalf("expected bottom feedback and (必须记) entries preserved by priority truncation:\n%s", bounded)
+	}
+}
+
+func TestBM25FRareTermAndStopwordFiltering(t *testing.T) {
+	store, _ := newTestStore(t)
+
+	// Populate several noisy docs sharing common token "3333", including a long verbose log dump.
+	noisyBody := strings.Repeat("3333 服务器日常启动日志正常，端口 3333 已监听。\n", 30)
+	for i := 1; i <= 4; i++ {
+		if _, err := store.Write(WriteRequest{
+			Scope:       ScopeProject,
+			Type:        TypeProject,
+			Name:        fmt.Sprintf("3333 常规记录 %d", i),
+			Description: "3333 日常运行说明",
+			Content:     noisyBody,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// One concise note containing the rare diagnostic error code 0xC0000005.
+	if _, err := store.Write(WriteRequest{
+		Scope:       ScopeProject,
+		Type:        TypeFeedback,
+		Name:        "3333 硬崩排查",
+		Description: "退出码 0xC0000005 时触发",
+		Content:     "V8 在性能核触发 0xC0000005 无声崩溃，绑定能效核解决。",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	hits, err := store.Search(SearchOptions{Query: "请问帮我看看怎么处理 3333 的 0xC0000005 问题"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hits) == 0 || hits[0].Name != "3333 硬崩排查" {
+		t.Fatalf("expected concise rare-term match 3333 硬崩排查 ranked #1, got %+v", hits)
+	}
+}

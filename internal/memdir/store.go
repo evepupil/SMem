@@ -120,10 +120,19 @@ func (s *Store) RenderCombinedIndex(scopeFilter string) (string, IndexResult, er
 			b.WriteString("\n")
 		}
 		if len(idx.Unindexed) > 0 {
-			b.WriteString("\n### 未登记到 MEMORY.md 的主题文件\n")
+			var ub strings.Builder
+			ub.WriteString("### 未登记到 MEMORY.md 的孤儿主题文件\n")
 			for _, u := range idx.Unindexed {
-				b.WriteString(FormatIndexLine(u.Name, u.File, u.Description))
-				b.WriteString("\n")
+				ub.WriteString(FormatIndexLine(u.Name, u.File, u.Description))
+				ub.WriteString("\n")
+			}
+			combinedRaw := strings.TrimSpace(b.String()) + "\n\n" + strings.TrimSpace(ub.String())
+			bounded, trunc, _ := truncateIndexNonSilent(combinedRaw, MaxIndexLines+2, MaxIndexBytes+256)
+			b.Reset()
+			b.WriteString(bounded)
+			b.WriteString("\n")
+			if trunc {
+				idx.Truncated = true
 			}
 		}
 		if idx.Warning != "" && !idx.Truncated {
@@ -152,11 +161,21 @@ func (s *Store) Read(scope Scope, files []string) ([]Entry, error) {
 		return nil, errors.New("请至少指定一个要读取的记忆文件名")
 	}
 
-	// Build indexed set quickly for Entry.Indexed metadata.
+	// Build existing & indexed sets quickly for Entry.Indexed and Entry.LinkedFiles metadata.
+	existingFiles := make(map[string]bool)
+	if dirEntries, err := os.ReadDir(dir); err == nil {
+		for _, de := range dirEntries {
+			if isRegularMarkdown(de) {
+				existingFiles[de.Name()] = true
+			}
+		}
+	}
 	indexedSet := make(map[string]bool)
-	if idxRaw, err := os.ReadFile(filepath.Join(dir, IndexFileName)); err == nil {
-		for _, f := range extractLinkedFiles(string(idxRaw)) {
-			indexedSet[f] = true
+	if idx, err := loadScopeIndex(scope, dir, s.now()); err == nil {
+		for _, m := range idx.Manifest {
+			if m.Indexed {
+				indexedSet[m.File] = true
+			}
 		}
 	}
 
@@ -183,6 +202,12 @@ func (s *Store) Read(scope Scope, files []string) ([]Entry, error) {
 			return nil, err
 		}
 		fm, body, hasFM := ParseDocument(raw, file)
+		var linkedChildren []string
+		for _, lf := range ExtractLinkedFiles(body) {
+			if lf != file && existingFiles[lf] {
+				linkedChildren = append(linkedChildren, lf)
+			}
+		}
 		ageLabel, ageDays, staleWarn := FormatAge(info.ModTime(), now)
 		entries = append(entries, Entry{
 			Scope:        scope,
@@ -199,6 +224,7 @@ func (s *Store) Read(scope Scope, files []string) ([]Entry, error) {
 			StaleWarning: staleWarn,
 			Indexed:      indexedSet[file],
 			HasHeader:    hasFM,
+			LinkedFiles:  linkedChildren,
 		})
 	}
 	return entries, nil

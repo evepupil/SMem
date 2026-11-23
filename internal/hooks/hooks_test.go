@@ -198,3 +198,65 @@ func TestAntigravitySessionStartAndPreInvocation(t *testing.T) {
 		t.Fatalf("expected PreInvocation invocationNum=2 to return {}, got: %s", pre2Out.String())
 	}
 }
+
+func TestIntentNoiseReductionAndHubSubMemoryRescue(t *testing.T) {
+	// 1. Everyday coding requests and fenced code blocks must NOT false-trigger memory hints.
+	falsePositives := []string{
+		"帮我把这个接口改成异步函数",
+		"把页面上的按钮统一用 Button 组件",
+		"这个函数不要再返回 nil error",
+		"请看报错代码：\n```\n// 记住：以后都用 v2\nconst x = 1\n```",
+	}
+	for _, p := range falsePositives {
+		if got := DetectMemoryIntent(p); got != IntentNone {
+			t.Fatalf("expected IntentNone for coding prompt %q, got %v", p, got)
+		}
+	}
+
+	// Explicit memory/convention prompts MUST still trigger accurately.
+	if got := DetectMemoryIntent("把发版记忆里的审批人改成老陈"); got != IntentUpdateOrForget {
+		t.Fatalf("expected IntentUpdateOrForget, got %v", got)
+	}
+	if got := DetectMemoryIntent("项目开发规矩：接口脚本不要再用旧版 axios"); got != IntentWrite {
+		t.Fatalf("expected IntentWrite, got %v", got)
+	}
+
+	// 2. Hidden sub-memory archived inside a Hub file is automatically rescued on prompt submit!
+	store := newHookTestStore(t)
+	dir := store.Layout.ProjectDir()
+	hubDoc := memdir.RenderDocument(memdir.Frontmatter{
+		Name:        "数据库故障汇总",
+		Description: "本地调试库故障汇总入口",
+		Type:        memdir.TypeReference,
+	}, "- [[pglite-corrupt-on-kill]] — 强杀进程导致损坏\n")
+	subDoc := memdir.RenderDocument(memdir.Frontmatter{
+		Name:        "PGlite 强杀必坏",
+		Description: "PGlite Aborted 报错恢复步骤",
+		Type:        memdir.TypeProject,
+	}, "出现 PGlite Aborted 时必须换新数据目录重新执行 dev-seed。")
+
+	if err := os.WriteFile(filepath.Join(dir, "db-hub.md"), hubDoc, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "pglite-corrupt-on-kill.md"), subDoc, 0600); err != nil {
+		t.Fatal(err)
+	}
+	// Rebuild index so db-hub.md is in MEMORY.md while pglite-corrupt-on-kill.md stays sub-indexed.
+	if _, err := store.RebuildIndex("project"); err != nil {
+		t.Fatal(err)
+	}
+
+	var promptOut bytes.Buffer
+	payload, _ := json.Marshal(map[string]any{
+		"prompt": "本地报 PGlite Aborted 库坏了怎么修",
+	})
+	if err := Handle(store, Options{Agent: "codex", Event: "prompt-submit"}, bytes.NewReader(payload), &promptOut); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(promptOut.String(), "pglite-corrupt-on-kill.md") {
+		t.Fatalf("expected hidden Hub sub-memory rescued in prompt-submit output, got:\n%s", promptOut.String())
+	}
+	if strings.Contains(promptOut.String(), "db-hub.md") {
+		t.Fatalf("root-visible Hub entry db-hub.md should not be duplicated in overflow rescue:\n%s", promptOut.String())
+	}
+}

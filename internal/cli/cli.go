@@ -336,6 +336,9 @@ func runRead(args []string, store *memdir.Store, out, errOut io.Writer) error {
 		_, _ = fmt.Fprintf(out, "# %s (%s/%s)\n", e.Name, e.Scope, e.File)
 		_, _ = fmt.Fprintf(out, "type: %s | age: %s | etag: %s\n", e.Type, e.Age, e.ETag)
 		_, _ = fmt.Fprintf(out, "description: %s\n", e.Description)
+		if len(e.LinkedFiles) > 0 {
+			_, _ = fmt.Fprintf(out, "linked_files: %s\n", strings.Join(e.LinkedFiles, ", "))
+		}
 		if e.StaleWarning != "" {
 			_, _ = fmt.Fprintf(out, "警告：%s\n", e.StaleWarning)
 		}
