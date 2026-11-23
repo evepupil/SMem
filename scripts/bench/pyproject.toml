@@ -1,6 +1,0 @@
-[tool.mypy]
-strict = true
-python_version = "3.11"
-
-[tool.ruff]
-target-version = "py311"

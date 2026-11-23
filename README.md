@@ -1,58 +1,92 @@
-# smem · share mem
+# SMem · 通用 AI 编程 Agent 统一记忆底座
 
-让不同编程助手共用一份记忆。记忆是你能打开修改的 Markdown；工具名叫 smem，日常命令叫 `mem`。
+**SMem** 是一个正式、极简、本地优先（Local-First）的通用 AI 编程记忆工具。它以 **Claude Code 原生记忆格式**（`MEMORY.md` 索引 + 3 字段 Frontmatter 主题 Markdown + 4 分类纪律）为开放标准，让 **Claude Code、Codex CLI、Cursor、Gemini CLI、OpenCode、Windsurf、GitHub Copilot、Cline、Antigravity、Aider** 等所有 AI 编程工具共同读写同一份记忆。
 
-## 第一次使用
+- **零数据库、零向量库、零常驻进程**：纯 Markdown 文件即唯一真相源，人改、Claude 改或 `git pull` 即刻生效。
+- **单一静态 Go 二进制**：纯标准库零第三方依赖，冷启动低于 5ms，跨平台（Windows / macOS / Linux）。
+- **2 层清晰作用域**：`project`（默认存本机 `~/.smem/projects/<repo-id>/`，零污染项目 Git，自动跨 Git Worktree 共享，可按需选择性同步进仓库）+ `global`（个人跨项目偏好 `~/.smem/global/`，独立私有 Git 仓库同步）。
+- **Claude Code 原生零损耗兼容**：默认通过 `autoMemoryDirectory` 直连 SMem 项目目录，100% 保留 Claude Code 原生自动记忆、`extractMemories` 与 `/dream`，同时由 SMem 补齐跨项目全局记忆并向其他所有 AI 工具开放同一份文件。
+- **三通道统一接入**：5 工具精简 **MCP Server** + 超轻量 **Lifecycle Hooks**（会话启动自动注入 `MEMORY.md` 索引、显式长期约定提醒写入）+ `AGENTS.md` / `SKILL.md` / CLI 通用兜底。
 
-开发机从仓库根目录执行 `go install ./cmd/mem`（Go 1.25+），将 Go 的可执行文件目录加入 `PATH`。已经编译好的本机版本是 `C:\code\smem\bin\mem.exe`，可直接用绝对路径运行；单文件运行不需要 Go，需要 Git 和支持硬链接的本地磁盘（例如 NTFS、APFS、ext4）。如果 `mem` 已被其他软件占用，请使用完整路径或先解决命名冲突。
+---
 
-在**想共享记忆的项目目录**中：
+## 快速开始
 
-```sh
-mem init --dry-run
-mem init
-```
-
-预览会列出拟写的文件。默认识别本机工具，也可以只选 `mem init --agents claude,codex`。用户目录下只接入识别到或选定的工具；项目根统一增加短说明，供支持它的其他客户端复用。开一个新会话，让助手读到新的说明。
-
-## 平时如何用
+### 1. 编译安装
 
 ```sh
-mem add "发布服务改完配置需要重建容器，只重启不会生效。"
-mem search 发布 容器
-mem add --global "涉及生产数据的修改必须先给我看差异。"
-mem migrate
+go install ./cmd/smem
 ```
 
-第一个助手写，另一个从同一仓库的任意子目录就能查。平时直接说“这个约定改了”“忘掉这一条”“我有哪些偏好”即可。需要核对时也能自己操作：
+或从仓库根目录直接构建单文件：
 
-| 想做什么 | 用法 |
+```sh
+go build -o bin/smem ./cmd/smem        # macOS / Linux
+go build -o bin/smem.exe ./cmd/smem    # Windows
+```
+
+### 2. 一键接入本机 AI 编程工具
+
+在你的 Git 项目根目录中先预览再应用：
+
+```sh
+smem setup --dry-run
+smem setup
+```
+
+- 默认自动探测本机已安装工具，也可用 `--agents claude,codex,cursor,gemini,opencode` 显式指定。
+- **Claude Code 默认使用 `native` 模式**（配置 `.claude/settings.local.json` 的 `autoMemoryDirectory` 直连 SMem 项目目录 + 注入全局记忆 Hook）；如需强制所有读写统一经由 MCP，可指定 `--claude-mode managed`。
+- 修改任何工具配置文件前，SMem 会自动在 `~/.smem/backups/` 备份原文件，随时可通过 `smem setup --remove` 安全回滚。
+
+### 3. 导入既有原生记忆（可选）
+
+```sh
+smem import --from claude --dry-run
+smem import --from claude
+```
+
+同样支持 `--from codex`、`--from cline` 以及任意 Markdown 目录 `--from dir --path <目录>`。
+
+---
+
+## 日常使用
+
+正常使用任何已接入的 AI 编程工具即可，无需手动敲命令。需要手动查改、运维或跨工具共享时，可使用等价 CLI（全部支持 `--json`）：
+
+| 场景 | 命令 |
 | --- | --- |
-| 开工先看常用约定和相关经验 | `mem search --start 发布 容器`；只有用户明确要求每次开工都提醒，才用 `mem add --always "约定"` |
-| 浏览个人偏好或项目经验 | `mem list --scope global`、`mem list --scope project`；默认每页 10 条，按提示翻页 |
-| 看原文 | 从查询或清单复制引用，运行 `mem show 引用` |
-| 纠正、忘记 | `mem update 引用 "新的说法"`、`mem forget 引用`。期间有人改过，旧引用失效，要重新查；不能凭关键词删除 |
+| 查看当前项目与全局记忆索引 | `smem index` |
+| 按需读取某条主题记忆（含相对年龄与 `etag`） | `smem read project_release_owner.md` |
+| 写入 / 更新一条记忆 | `smem write --type project --name "发版审批人" --desc "涉及生产发版审批时触发" "发版前必须由小周放行。"` |
+| 安全删除一条记忆 | `smem delete project_release_owner.md --etag <etag>` |
+| 关键词检索全库 | `smem search 发版 小周` |
+| 检查孤儿文件、超限、过期与潜在密钥 | `smem check`（加 `--fix` 自动修复索引） |
+| 选择性同步到项目 Git 仓库（团队共享） | `smem share status`、`smem share push <file>`、`smem share pull` |
+| 同步个人全局记忆私有 Git 仓库 | `smem sync` |
+| 获取跨工具 4 阶段 Dream 整理协议 | `smem dream` |
 
-手写主题文件只改删选中的一行，自动生成的单条笔记整体处理。修改后请重新查询获得最新引用。忘掉仅影响共享库的当前内容，不会清除 Git 历史、别人的副本或原聊天。`mem migrate` 只打印提示词，贴给旧助手，确认候选后再迁移。已有安装重新运行 `mem init --dry-run`、`mem init` 并新开会话，即可让助手看到新用法。
+---
 
-| 放在哪里 | 什么时候该记 | 怎么同步 |
-| --- | --- | --- |
-| `~/.mem/memory/*.md` | 跨项目的个人偏好 | `~/.mem` 自己是 Git 仓库，按需配置**私有**远端 |
-| `<项目>/.mem/memory/*.md` | 这个项目的决定、重复踩的坑 | 随现有项目仓库提交，其他人可能看见 |
+## 目录与作用域
 
-- 搜索只读这两个目录的 Markdown。完整词组和多个关键词同时命中的经验靠前，同分时项目优先，最多五条，附出处及引用；开工时另外展示最多三条常用约定。结果不够相关就换词查一次。手改或删除立即生效，无索引要刷新。
-- 在 Git 项目外可以查全局、显式记全局；不会把本应私有到项目的结论默默写成全局。项目使用当前工作树，多个 Git 工作树之间通过 Git 交换项目笔记。
-- smem 不联网、不调用模型、不抓聊天、不自动提交或推送。原生记忆可继续用，也可能独立写入；只有经确认迁入或通过 `mem add` 写下的事实会共享。Git 不会追踪空目录，第一条项目笔记产生后即可提交。
-- 云端、容器和远程 SSH 的助手只能读它自己所在环境的文件；需要在那边安装命令并提供允许共享的仓库。不要把私钥、令牌或个人资料留在记忆中。只读聊天可由用户运行命令并转贴结果。
+| 作用域 | 存储位置 | 用途 | 与 Git 的关系 |
+| --- | --- | --- | --- |
+| **`project`**（默认） | `~/.smem/projects/<repo-id>/` | 项目决策（`project`）、外部指针（`reference`）、项目专属纠错（`feedback`） | **默认不污染项目 Git**；同仓库多个 Git Worktree 自动共享；随时可用 `smem share push/pull` 选择性同步进 `<repo>/.smem/memory/`（或 `smem setup --shared` 直接绑定仓库目录） |
+| **`global`** | `~/.smem/global/` | 跨项目个人画像（`user`）与通用工作偏好（`feedback`） | 本身是个人私有 Git 仓库，可通过 `smem sync` 跨设备同步 |
 
-## 调研、设计与验证
+---
 
-[八类助手的原生记忆对照](docs/调研/主流编程助手的记忆.md) · [使用体验](docs/功能清单.md) · [路线图](docs/roadmap.md) · [真实客户端盲测结果](docs/验证/跨工具接力.md) · [复跑方法](scripts/bench/README.md)
+## 正式文档
+
+- [架构设计](docs/架构设计.md)
+- [记忆格式与行为规范](docs/格式规范.md)
+- [主流 AI 编程工具适配矩阵](docs/工具适配.md)
+- [主流编程助手的原生记忆调研](docs/调研/主流编程助手的记忆.md)
+
+## 开发与验收门禁
 
 ```sh
 go vet ./...
 go test ./...
 go test -race ./...
 ```
-
-Windows 可运行 `./scripts/check.ps1` 做完整门禁。额外的 `./scripts/check.ps1 -RealCodex` 会在临时用户目录调用真实 Codex 的提示预览，不调用模型，也不使用个人笔记。跨品牌真实模型无提醒时会不会主动查，是独立验收项。

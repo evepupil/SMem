@@ -1,3 +1,20 @@
-.fleet/
-.docseek/
+# Binaries and build outputs
 /bin/
+/dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.txt
+
+# Local IDE / OS noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local Claude Code personal settings
+.claude/settings.local.json
