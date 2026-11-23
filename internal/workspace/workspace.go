@@ -141,32 +141,45 @@ func hasSharedMarker(repoRoot string) bool {
 	return err == nil && !info.IsDir()
 }
 
+// ClaudeNativeMemoryDirIn returns the Claude Code Auto Memory path inside a specific config dir.
+func ClaudeNativeMemoryDirIn(configDir, repoRoot string) string {
+	slug := sanitizeClaudeProjectSlug(repoRoot)
+	return filepath.Join(configDir, "projects", slug, "memory")
+}
+
 // ClaudeNativeMemoryDir returns the default Claude Code Auto Memory path for a repository root.
 // Claude Code sanitizes paths by replacing path separators, colons, and spaces with hyphens.
 func ClaudeNativeMemoryDir(homeDir, repoRoot string) string {
-	slug := sanitizeClaudeProjectSlug(repoRoot)
-	return filepath.Join(homeDir, ".claude", "projects", slug, "memory")
+	return ClaudeNativeMemoryDirIn(filepath.Join(homeDir, ".claude"), repoRoot)
 }
 
 // CandidateClaudeMemoryDirs returns possible Claude Code native memory directories for a repo.
 func CandidateClaudeMemoryDirs(homeDir, repoRoot, mainRepoRoot string) []string {
 	seen := make(map[string]bool)
 	var out []string
-	add := func(p string) {
-		if p == "" {
+	var configDirs []string
+	if env := strings.TrimSpace(os.Getenv("CLAUDE_CONFIG_DIR")); env != "" {
+		configDirs = append(configDirs, env)
+	}
+	configDirs = append(configDirs, filepath.Join(homeDir, ".claude"))
+
+	add := func(cfgDir, p string) {
+		if cfgDir == "" || p == "" {
 			return
 		}
-		dir := ClaudeNativeMemoryDir(homeDir, p)
+		dir := ClaudeNativeMemoryDirIn(cfgDir, p)
 		key := normKey(dir)
 		if !seen[key] {
 			seen[key] = true
 			out = append(out, dir)
 		}
 	}
-	add(repoRoot)
-	add(mainRepoRoot)
-	if real, err := filepath.EvalSymlinks(repoRoot); err == nil {
-		add(real)
+	for _, cfgDir := range configDirs {
+		add(cfgDir, repoRoot)
+		add(cfgDir, mainRepoRoot)
+		if real, err := filepath.EvalSymlinks(repoRoot); err == nil {
+			add(cfgDir, real)
+		}
 	}
 	return out
 }

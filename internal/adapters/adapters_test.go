@@ -302,3 +302,33 @@ func TestSetupAntigravityPreservesExistingHooksAndRemove(t *testing.T) {
 		t.Fatalf("expected SKILL.md removed on --remove")
 	}
 }
+
+func TestSetupClaudeCustomConfigDir(t *testing.T) {
+	layout := newAdapterTestLayout(t)
+	customCfgDir := filepath.Join(filepath.Dir(layout.HomeDir), "rec-account-55818", "config")
+	if err := os.MkdirAll(customCfgDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLAUDE_CONFIG_DIR", customCfgDir)
+
+	if _, err := RunSetup(layout, SetupOptions{Agents: "claude", ClaudeMode: "native", SmemBin: "smem"}); err != nil {
+		t.Fatalf("setup with CLAUDE_CONFIG_DIR failed: %v", err)
+	}
+
+	customJSON := filepath.Join(customCfgDir, ".claude.json")
+	customSettings := filepath.Join(customCfgDir, "settings.json")
+	customSkill := filepath.Join(customCfgDir, "skills", "smem", "SKILL.md")
+
+	if !fileContains(customJSON, `"smem"`) {
+		t.Fatalf("expected smem MCP in %s", customJSON)
+	}
+	if !fileContains(customSettings, "smem hook claude") {
+		t.Fatalf("expected smem hooks in %s", customSettings)
+	}
+	if _, err := os.Stat(customSkill); err != nil {
+		t.Fatalf("expected skill file in %s: %v", customSkill, err)
+	}
+	if _, err := os.Stat(filepath.Join(layout.HomeDir, ".claude.json")); err == nil {
+		t.Fatalf("default ~/.claude.json should not be modified when CLAUDE_CONFIG_DIR is set")
+	}
+}

@@ -81,10 +81,11 @@ func DetectAgents(layout workspace.Layout) []string {
 	}
 
 	codexHome := resolveCodexHome(layout.HomeDir)
+	claudeDir, claudeJSON := resolveClaudePaths(layout.HomeDir)
 	check("antigravity", dirOrFileExists(filepath.Join(layout.HomeDir, ".gemini", "config")) ||
 		dirOrFileExists(filepath.Join(layout.HomeDir, ".gemini", "antigravity")))
-	check("claude", dirOrFileExists(filepath.Join(layout.HomeDir, ".claude")) ||
-		dirOrFileExists(filepath.Join(layout.HomeDir, ".claude.json")) ||
+	check("claude", dirOrFileExists(claudeDir) ||
+		dirOrFileExists(claudeJSON) ||
 		hasBinary("claude"))
 	check("codex", dirOrFileExists(codexHome) || hasBinary("codex"))
 	check("cursor", dirOrFileExists(filepath.Join(layout.HomeDir, ".cursor")) ||
@@ -347,9 +348,9 @@ func planAntigravity(layout workspace.Layout, opts SetupOptions) ([]PlannedActio
 
 func planClaude(layout workspace.Layout, opts SetupOptions) ([]PlannedAction, error) {
 	var actions []PlannedAction
+	claudeDir, claudeJSON := resolveClaudePaths(layout.HomeDir)
 
-	// 1. Register MCP server in ~/.claude.json
-	claudeJSON := filepath.Join(layout.HomeDir, ".claude.json")
+	// 1. Register MCP server in .claude.json
 	a1, err := planJSONPatch("claude", "mcp", claudeJSON, "注册 SMem MCP 服务 (mcpServers.smem)", opts.Remove, func(root map[string]any) {
 		servers := getOrCreateMap(root, "mcpServers")
 		if opts.Remove {
@@ -366,8 +367,8 @@ func planClaude(layout workspace.Layout, opts SetupOptions) ([]PlannedAction, er
 	}
 	actions = append(actions, a1)
 
-	// 2. Register lightweight user-level hooks in ~/.claude/settings.json
-	claudeSettings := filepath.Join(layout.HomeDir, ".claude", "settings.json")
+	// 2. Register lightweight user-level hooks in <claudeDir>/settings.json
+	claudeSettings := filepath.Join(claudeDir, "settings.json")
 	modeArg := opts.ClaudeMode
 	a2, err := planJSONPatch("claude", "hooks", claudeSettings, fmt.Sprintf("配置 Claude Code 生命周期 Hooks（%s 模式）", modeArg), opts.Remove, func(root map[string]any) {
 		hooksMap := getOrCreateMap(root, "hooks")
@@ -410,8 +411,8 @@ func planClaude(layout workspace.Layout, opts SetupOptions) ([]PlannedAction, er
 		actions = append(actions, a3)
 	}
 
-	// 4. User-level Claude Skill (~/.claude/skills/smem/SKILL.md)
-	skillPath := filepath.Join(layout.HomeDir, ".claude", "skills", "smem", "SKILL.md")
+	// 4. User-level Claude Skill (<claudeDir>/skills/smem/SKILL.md)
+	skillPath := filepath.Join(claudeDir, "skills", "smem", "SKILL.md")
 	actions = append(actions, planStaticFile("claude", "skill", skillPath, "安装 SMem Agent Skill 规范", []byte(SkillMarkdown), 0644, opts.Remove))
 
 	return actions, nil
@@ -751,7 +752,8 @@ func checkAgentConfigured(layout workspace.Layout, agent string) (bool, string) 
 		}
 		return false, "未接入"
 	case "claude":
-		hasMCP := fileContains(filepath.Join(layout.HomeDir, ".claude.json"), `"smem"`)
+		_, claudeJSON := resolveClaudePaths(layout.HomeDir)
+		hasMCP := fileContains(claudeJSON, `"smem"`)
 		hasLocal := layout.InProject && fileContains(filepath.Join(layout.RepoRoot, ".claude", "settings.local.json"), "autoMemoryDirectory")
 		if hasMCP && hasLocal {
 			return true, "MCP + autoMemoryDirectory 原生直连已就绪"
@@ -820,6 +822,13 @@ func resolveCodexHome(homeDir string) string {
 		return env
 	}
 	return filepath.Join(homeDir, ".codex")
+}
+
+func resolveClaudePaths(homeDir string) (configDir, claudeJSON string) {
+	if env := strings.TrimSpace(os.Getenv("CLAUDE_CONFIG_DIR")); env != "" {
+		return env, filepath.Join(env, ".claude.json")
+	}
+	return filepath.Join(homeDir, ".claude"), filepath.Join(homeDir, ".claude.json")
 }
 
 func readOptionalFile(path string) ([]byte, error) {
