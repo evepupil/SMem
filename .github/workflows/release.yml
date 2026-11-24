@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run verification gate
+        run: |
+          go vet ./...
+          go test -race -count=1 ./...
+
+      - name: Cross-compile and package binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          LDFLAGS="-s -w -X smem/internal/cli.Version=${VERSION} -X smem/internal/mcp.ServerVersion=${VERSION}"
+
+          rm -rf dist stage
+          mkdir -p dist
+
+          TARGETS=(
+            "linux amd64"
+            "linux arm64"
+            "darwin amd64"
+            "darwin arm64"
+            "windows amd64"
+            "windows arm64"
+          )
+
+          for target in "${TARGETS[@]}"; do
+            read -r GOOS GOARCH <<< "${target}"
+            BIN_NAME="smem"
+            if [ "${GOOS}" = "windows" ]; then
+              BIN_NAME="smem.exe"
+            fi
+
+            STAGE_DIR="stage/smem_${VERSION}_${GOOS}_${GOARCH}"
+            mkdir -p "${STAGE_DIR}"
+
+            echo "==> Building ${GOOS}/${GOARCH}"
+            CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" \
+              go build -trimpath -ldflags="${LDFLAGS}" -o "${STAGE_DIR}/${BIN_NAME}" ./cmd/smem
+
+            if [ "${GOOS}" = "linux" ] && [ "${GOARCH}" = "amd64" ]; then
+              "${STAGE_DIR}/${BIN_NAME}" version
+            fi
+
+            cp LICENSE README.md "${STAGE_DIR}/"
+
+            if [ "${GOOS}" = "windows" ]; then
+              (cd "${STAGE_DIR}" && zip -q "../../dist/smem_${VERSION}_${GOOS}_${GOARCH}.zip" .)
+            else
+              tar -czf "dist/smem_${VERSION}_${GOOS}_${GOARCH}.tar.gz" -C "${STAGE_DIR}" .
+            fi
+          done
+
+          (cd dist && sha256sum *.tar.gz *.zip > checksums.txt)
+          cat dist/checksums.txt
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          ARGS=(
+            "${TAG}"
+            dist/*
+            --title "SMem ${TAG}"
+            --generate-notes
+            --verify-tag
+          )
+          if [[ "${TAG}" == *-* ]]; then
+            ARGS+=(--prerelease)
+          fi
+
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" dist/* --clobber
+          else
+            gh release create "${ARGS[@]}"
+          fi

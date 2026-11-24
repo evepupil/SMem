@@ -11,9 +11,11 @@ import (
 	"smem/internal/workspace"
 )
 
+// ServerVersion is injected at release build time via -ldflags; defaults to the current dev baseline.
+var ServerVersion = "2.0.0"
+
 const (
-	serverName    = "smem"
-	serverVersion = "2.0.0"
+	serverName = "smem"
 
 	serverInstructions = `SMem 是跨所有 AI 编程工具的统一共享记忆层（兼容 Claude Code MEMORY.md + 4 分类标准）。
 核心规范：
@@ -155,7 +157,7 @@ func (s *Server) handleInitialize(req rpcRequest) rpcResponse {
 		},
 		"serverInfo": map[string]any{
 			"name":    serverName,
-			"version": serverVersion,
+			"version": ServerVersion,
 		},
 		"instructions": serverInstructions,
 	})

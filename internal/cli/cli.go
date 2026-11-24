@@ -18,7 +18,8 @@ import (
 	"smem/internal/workspace"
 )
 
-const Version = "2.0.0"
+// Version is injected at release build time via -ldflags; defaults to the current dev baseline.
+var Version = "2.0.0"
 
 const usageText = `smem · 通用 AI 编程 Agent 统一记忆底座（Claude Code 原生格式兼容）
 
