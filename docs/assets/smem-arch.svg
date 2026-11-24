@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 500" width="1200" height="500" shape-rendering="crispEdges" role="img" aria-label="SMem 系统架构图">
+  <defs>
+    <style>
+      .sans { font-family: "Inter Tight", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; }
+      .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    </style>
+  </defs>
+
+  <!-- Outer Canvas -->
+  <rect x="0" y="0" width="1200" height="500" fill="#FFFFFF"/>
+  <rect x="1.5" y="1.5" width="1197" height="497" fill="none" stroke="#0A0A0A" stroke-width="3"/>
+
+  <!-- Top Header Bar -->
+  <rect x="0" y="0" width="1200" height="44" fill="#F3ACF0"/>
+  <line x1="0" y1="44" x2="1200" y2="44" stroke="#0A0A0A" stroke-width="2"/>
+  <text x="28" y="27" fill="#0A0A0A" font-size="13" font-weight="700" class="mono">ARCHITECTURE // 三通道统一接入 × 单二进制引擎 × 纯 MARKDOWN 双层存储</text>
+  <rect x="1032" y="11" width="140" height="22" fill="#0A0A0A"/>
+  <text x="1102" y="26" text-anchor="middle" fill="#F3ACF0" font-size="11" font-weight="700" class="mono">ZERO DAEMON</text>
+
+  <!-- Subtle Grid Backdrop Lines -->
+  <line x1="304" y1="44" x2="304" y2="500" stroke="#0A0A0A" stroke-width="1" stroke-dasharray="4 4" opacity="0.25"/>
+  <line x1="600" y1="44" x2="600" y2="500" stroke="#0A0A0A" stroke-width="1" stroke-dasharray="4 4" opacity="0.25"/>
+  <line x1="896" y1="44" x2="896" y2="500" stroke="#0A0A0A" stroke-width="1" stroke-dasharray="4 4" opacity="0.25"/>
+
+  <!-- Column Headers -->
+  <g>
+    <rect x="24" y="64" width="252" height="32" fill="#0A0A0A"/>
+    <text x="36" y="85" fill="#F3ACF0" font-size="12" font-weight="700" class="mono">01 / AI 编程客户端</text>
+
+    <rect x="324" y="64" width="252" height="32" fill="#0A0A0A"/>
+    <text x="336" y="85" fill="#FFFFFF" font-size="12" font-weight="700" class="mono">02 / 三通道统一接入</text>
+
+    <rect x="624" y="64" width="252" height="32" fill="#0A0A0A"/>
+    <text x="636" y="85" fill="#FFFFFF" font-size="12" font-weight="700" class="mono">03 / SMEM 单二进制引擎</text>
+
+    <rect x="924" y="64" width="252" height="32" fill="#0A0A0A"/>
+    <text x="936" y="85" fill="#F3ACF0" font-size="12" font-weight="700" class="mono">04 / 纯 MARKDOWN 存储</text>
+  </g>
+
+  <!-- COLUMN 1: AI CLIENTS -->
+  <g>
+    <rect x="24" y="114" width="252" height="74" fill="#F3ACF0" stroke="#0A0A0A" stroke-width="2"/>
+    <rect x="24" y="114" width="8" height="74" fill="#2370E8"/>
+    <text x="44" y="142" fill="#0A0A0A" font-size="16" font-weight="700" class="sans">Claude Code</text>
+    <text x="44" y="168" fill="#0A0A0A" font-size="12" font-weight="500" class="mono">native / managed 模式</text>
+
+    <rect x="24" y="204" width="252" height="74" fill="#FFFFFF" stroke="#0A0A0A" stroke-width="2"/>
+    <rect x="24" y="204" width="8" height="74" fill="#2BA676"/>
+    <text x="44" y="232" fill="#0A0A0A" font-size="16" font-weight="700" class="sans">Codex CLI</text>
+    <text x="44" y="258" fill="#0A0A0A" font-size="12" font-weight="500" class="mono">MCP + Hooks + AGENTS.md</text>
+
+    <rect x="24" y="294" width="252" height="74" fill="#FFFFFF" stroke="#0A0A0A" stroke-width="2"/>
+    <rect x="24" y="294" width="8" height="74" fill="#A98BF7"/>
+    <text x="44" y="322" fill="#0A0A0A" font-size="16" font-weight="700" class="sans">Cursor · Gemini CLI</text>
+    <text x="44" y="348" fill="#0A0A0A" font-size="12" font-weight="500" class="mono">MCP + Hooks + Rules</text>
+
+    <rect x="24" y="384" width="252" height="74" fill="#FFFFFF" stroke="#0A0A0A" stroke-width="2"/>
+    <rect x="24" y="384" width="8" height="74" fill="#FF5A5A"/>
+    <text x="44" y="412" fill="#0A0A0A" font-size="15" font-weight="700" class="sans">OpenCode · Copilot · Windsurf</text>
+    <text x="44" y="438" fill="#0A0A0A" font-size="12" font-weight="500" class="mono">MCP + SKILL.md + Cline/Roo</text>
+  </g>
+
+  <!-- COLUMN 2: 3 CHANNELS -->
+  <g>
+    <rect x="324" y="114" width="252" height="104" fill="#FFFFFF" stroke="#0A0A0A" stroke-width="2"/>
+    <rect x="324" y="114" width="252" height="28" fill="#2370E8"/>
+    <text x="338" y="133" fill="#FFFFFF" font-size="12" font-weight="700" class="mono">MCP STDIO SERVER</text>
+    <text x="338" y="162" fill="#0A0A0A" font-size="13" font-weight="700" class="mono">smem mcp</text>
+    <text x="338" y="184" fill="#0A0A0A" font-size="12" class="sans">5 精简工具 + smem://index</text>
+    <text x="338" y="203" fill="#0A0A0A" font-size="12" class="sans">四阶段整理 Prompt (dream)</text>
+
+    <rect x="324" y="234" width="252" height="104" fill="#FFFFFF" stroke="#0A0A0A" stroke-width="2"/>
+    <rect x="324" y="234" width="252" height="28" fill="#2BA676"/>
+    <text x="338" y="253" fill="#FFFFFF" font-size="12" font-weight="700" class="mono">LIFECYCLE HOOKS</text>
+    <text x="338" y="282" fill="#0A0A0A" font-size="13" font-weight="700" class="mono">smem hook</text>
+    <text x="338" y="304" fill="#0A0A0A" font-size="12" class="sans">会话启动注入 + global 内联</text>
+    <text x="338" y="323" fill="#0A0A0A" font-size="12" class="sans">确定性意图识别 (Fail-open)</text>
+
+    <rect x="324" y="354" width="252" height="104" fill="#FFFFFF" stroke="#0A0A0A" stroke-width="2"/>
+    <rect x="324" y="354" width="252" height="28" fill="#A98BF7"/>
+    <text x="338" y="373" fill="#0A0A0A" font-size="12" font-weight="700" class="mono">RULES / SKILLS / CLI</text>
+    <text x="338" y="402" fill="#0A0A0A" font-size="13" font-weight="700" class="mono">AGENTS.md · SKILL.md</text>
+    <text x="338" y="424" fill="#0A0A0A" font-size="12" class="sans">无 Hook 客户端兜底约束</text>
+    <text x="338" y="443" fill="#0A0A0A" font-size="12" class="sans">统一 CLI 手动读写与同步</text>
+  </g>
+
+  <!-- COLUMN 3: SMEM ENGINE -->
+  <g>
+    <rect x="624" y="114" width="252" height="104" fill="#FFFFFF" stroke="#0A0A0A" stroke-width="2"/>
+    <rect x="624" y="114" width="252" height="28" fill="#FF5A5A"/>
+    <text x="638" y="133" fill="#FFFFFF" font-size="12" font-weight="700" class="mono">GUARD // 安全护栏</text>
+    <text x="638" y="164" fill="#0A0A0A" font-size="13" font-weight="600" class="sans">11 类常见密钥模式拦截</text>
+    <text x="638" y="186" fill="#0A0A0A" font-size="12" class="sans">&lt;private&gt; 标签自动剥离</text>
+    <text x="638" y="205" fill="#0A0A0A" font-size="12" class="sans">路径越界与写入前校验</text>
+
+    <rect x="624" y="234" width="252" height="104" fill="#FFFFFF" stroke="#0A0A0A" stroke-width="2"/>
+    <rect x="624" y="234" width="252" height="28" fill="#0A0A0A"/>
+    <text x="638" y="253" fill="#F3ACF0" font-size="12" font-weight="700" class="mono">WORKSPACE // 作用域</text>
+    <text x="638" y="284" fill="#0A0A0A" font-size="13" font-weight="600" class="sans">Git RepoID 指纹归一化</text>
+    <text x="638" y="306" fill="#0A0A0A" font-size="12" class="sans">多 Worktree 自动共享记忆</text>
+    <text x="638" y="325" fill="#0A0A0A" font-size="12" class="sans">smem bind 自定义目录映射</text>
+
+    <rect x="624" y="354" width="252" height="104" fill="#FFFFFF" stroke="#0A0A0A" stroke-width="2"/>
+    <rect x="624" y="354" width="252" height="28" fill="#0A0A0A"/>
+    <text x="638" y="373" fill="#FFFFFF" font-size="12" font-weight="700" class="mono">MEMDIR // 并发与检索</text>
+    <text x="638" y="404" fill="#0A0A0A" font-size="13" font-weight="600" class="sans">OS 独占锁 + fsync 原子替换</text>
+    <text x="638" y="426" fill="#0A0A0A" font-size="12" class="sans">12 位 SHA-256 ETag 并发校验</text>
+    <text x="638" y="445" fill="#0A0A0A" font-size="12" class="sans">200 行/25KB 索引自愈与分词检索</text>
+  </g>
+
+  <!-- COLUMN 4: PURE MARKDOWN STORAGE -->
+  <g>
+    <rect x="924" y="114" width="252" height="104" fill="#F3ACF0" stroke="#0A0A0A" stroke-width="2"/>
+    <rect x="924" y="114" width="10" height="104" fill="#2BA676"/>
+    <text x="946" y="142" fill="#0A0A0A" font-size="13" font-weight="700" class="mono">~/.smem/global/</text>
+    <text x="946" y="166" fill="#0A0A0A" font-size="13" font-weight="600" class="sans">跨项目个人画像与偏好</text>
+    <text x="946" y="188" fill="#0A0A0A" font-size="12" class="mono">MEMORY.md + user_*.md</text>
+    <text x="946" y="206" fill="#0A0A0A" font-size="12" class="mono">支持 smem sync 跨端同步</text>
+
+    <rect x="924" y="234" width="252" height="104" fill="#FFFFFF" stroke="#0A0A0A" stroke-width="2"/>
+    <rect x="924" y="234" width="10" height="104" fill="#2370E8"/>
+    <text x="946" y="262" fill="#0A0A0A" font-size="13" font-weight="700" class="mono">~/.smem/projects/{id}/</text>
+    <text x="946" y="286" fill="#0A0A0A" font-size="13" font-weight="600" class="sans">默认零污染项目记忆</text>
+    <text x="946" y="308" fill="#0A0A0A" font-size="12" class="mono">feedback_*.md / project_*.md</text>
+    <text x="946" y="326" fill="#0A0A0A" font-size="12" class="mono">Claude native 直连目录</text>
+
+    <rect x="924" y="354" width="252" height="104" fill="#FFFFFF" stroke="#0A0A0A" stroke-width="2"/>
+    <rect x="924" y="354" width="10" height="104" fill="#A98BF7"/>
+    <text x="946" y="382" fill="#0A0A0A" font-size="13" font-weight="700" class="mono">{repo}/.smem/memory/</text>
+    <text x="946" y="406" fill="#0A0A0A" font-size="13" font-weight="600" class="sans">团队 Git 共享记忆（可选）</text>
+    <text x="946" y="428" fill="#0A0A0A" font-size="12" class="mono">smem share / --shared</text>
+    <text x="946" y="446" fill="#0A0A0A" font-size="12" class="mono">reference_*.md 外部指针</text>
+  </g>
+
+  <!-- Orthogonal Connectors + Pixel Arrowheads -->
+  <g stroke="#0A0A0A" stroke-width="2" fill="none">
+    <!-- Col 1 -> Col 2 -->
+    <line x1="276" y1="151" x2="320" y2="151"/>
+    <line x1="276" y1="241" x2="300" y2="241"/><line x1="300" y1="176" x2="300" y2="286"/><line x1="300" y1="176" x2="320" y2="176"/><line x1="300" y1="286" x2="320" y2="286"/>
+    <line x1="276" y1="331" x2="300" y2="331"/><line x1="300" y1="331" x2="300" y2="406"/><line x1="300" y1="406" x2="320" y2="406"/>
+    <line x1="276" y1="421" x2="320" y2="421"/>
+
+    <!-- Col 2 -> Col 3 -->
+    <line x1="576" y1="166" x2="620" y2="166"/>
+    <line x1="576" y1="286" x2="620" y2="286"/>
+    <line x1="576" y1="406" x2="620" y2="406"/>
+
+    <!-- Col 3 -> Col 4 -->
+    <line x1="876" y1="166" x2="920" y2="166"/>
+    <line x1="876" y1="286" x2="920" y2="286"/>
+    <line x1="876" y1="406" x2="920" y2="406"/>
+  </g>
+
+  <!-- Pixel Arrowheads -->
+  <g fill="#0A0A0A">
+    <rect x="316" y="147" width="6" height="8"/><rect x="316" y="172" width="6" height="8"/><rect x="316" y="282" width="6" height="8"/><rect x="316" y="402" width="6" height="8"/><rect x="316" y="417" width="6" height="8"/>
+    <rect x="616" y="162" width="6" height="8"/><rect x="616" y="282" width="6" height="8"/><rect x="616" y="402" width="6" height="8"/>
+    <rect x="916" y="162" width="6" height="8"/><rect x="916" y="282" width="6" height="8"/><rect x="916" y="402" width="6" height="8"/>
+  </g>
+</svg>

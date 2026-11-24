@@ -1,19 +1,24 @@
 <div align="center">
 
-# SMem
+<a href="https://smem.chaosyn.com">
+  <img src="docs/assets/smem-banner.svg" alt="SMem — 通用 AI 编程 Agent 统一记忆底座" width="100%" />
+</a>
 
-**通用 AI 编程 Agent 统一记忆底座 · Local-First Cross-Agent Memory Layer**
+<br />
 
-[![Go Version](https://img.shields.io/badge/Go-1.25%2B-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev/)
-[![Dependencies](https://img.shields.io/badge/Dependencies-Stdlib%20Only-2ea44f?style=flat-square)](#核心特性)
-[![Version](https://img.shields.io/badge/Version-v2.0.0-blue?style=flat-square)](https://github.com/evepupil/SMem)
-[![Protocol](https://img.shields.io/badge/MCP-JSON--RPC%202.0%20Stdio-7c3aed?style=flat-square)](#mcp-接口规范)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-64748b?style=flat-square)](#快速开始)
-[![License: MIT](https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square)](LICENSE)
+<img src="docs/assets/smem-icon.svg" alt="SMem Icon" width="36" height="36" align="absmiddle" /> &nbsp; **SMem** — 通用 AI 编程 Agent 统一记忆底座 · Local-First Cross-Agent Memory Layer
+
+[![Website](https://img.shields.io/badge/Website-smem.chaosyn.com-F3ACF0?style=flat-square&labelColor=0A0A0A)](https://smem.chaosyn.com)
+[![Go Version](https://img.shields.io/badge/Go-1.25%2B-2370E8?style=flat-square&logo=go&logoColor=white&labelColor=0A0A0A)](https://go.dev/)
+[![Dependencies](https://img.shields.io/badge/Dependencies-Stdlib%20Only-2BA676?style=flat-square&labelColor=0A0A0A)](#核心特性)
+[![Version](https://img.shields.io/badge/Version-v2.0.0-A98BF7?style=flat-square&labelColor=0A0A0A)](https://github.com/evepupil/SMem)
+[![Protocol](https://img.shields.io/badge/MCP-JSON--RPC%202.0%20Stdio-0A0A0A?style=flat-square&labelColor=F3ACF0)](#mcp-接口规范)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-2370E8?style=flat-square&labelColor=0A0A0A)](#快速开始)
+[![License: MIT](https://img.shields.io/badge/License-MIT-FF5A5A?style=flat-square&labelColor=0A0A0A)](LICENSE)
 
 让 **Claude Code、Codex CLI、Cursor、Gemini CLI、OpenCode、GitHub Copilot、Windsurf、Cline / Roo Code** 等所有 AI 编程工具共同读写同一份纯 Markdown 记忆。
 
-[快速开始](#快速开始) · [核心特性](#核心特性) · [架构与原理](#架构与原理) · [工具适配矩阵](#主流工具适配矩阵) · [CLI 与 MCP 手册](#cli-命令参考) · [安全与并发](#安全并发与自愈机制)
+[项目官网](https://smem.chaosyn.com) · [快速开始](#快速开始) · [核心特性](#核心特性) · [架构与原理](#架构与原理) · [工具适配矩阵](#主流工具适配矩阵) · [CLI 与 MCP 手册](#cli-命令参考) · [安全与并发](#安全并发与自愈机制)
 
 </div>
 
@@ -55,6 +60,11 @@
 ---
 
 ## 架构与原理
+
+<img src="docs/assets/smem-arch.svg" alt="SMem 系统架构图" width="100%" />
+
+<details>
+<summary>查看 Mermaid 文本版架构图</summary>
 
 ```mermaid
 flowchart LR
@@ -102,6 +112,8 @@ flowchart LR
     M --> PL
     M --> RS
 ```
+
+</details>
 
 ### 目录与文件格式
 
