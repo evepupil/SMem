@@ -11,7 +11,7 @@
 [![Website](https://img.shields.io/badge/Website-smem.chaosyn.com-F3ACF0?style=flat-square&labelColor=0A0A0A)](https://smem.chaosyn.com)
 [![Go Version](https://img.shields.io/badge/Go-1.25%2B-2370E8?style=flat-square&logo=go&logoColor=white&labelColor=0A0A0A)](https://go.dev/)
 [![Dependencies](https://img.shields.io/badge/Dependencies-Stdlib%20Only-2BA676?style=flat-square&labelColor=0A0A0A)](#核心特性)
-[![Version](https://img.shields.io/badge/Version-v2.0.0-A98BF7?style=flat-square&labelColor=0A0A0A)](https://github.com/evepupil/SMem)
+[![Version](https://img.shields.io/badge/Version-v2.0.0-A98BF7?style=flat-square&labelColor=0A0A0A)](https://github.com/evepupil/SMem/releases)
 [![Protocol](https://img.shields.io/badge/MCP-JSON--RPC%202.0%20Stdio-0A0A0A?style=flat-square&labelColor=F3ACF0)](#mcp-接口规范)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-2370E8?style=flat-square&labelColor=0A0A0A)](#快速开始)
 [![License: MIT](https://img.shields.io/badge/License-MIT-FF5A5A?style=flat-square&labelColor=0A0A0A)](LICENSE)
@@ -147,7 +147,41 @@ type: project
 
 ## 快速开始
 
-### 1. 安装（需 Go 1.25+）
+### 1. 安装
+
+#### 方式一：下载预编译二进制（推荐，无需 Go 环境）
+
+前往 [GitHub Releases](https://github.com/evepupil/SMem/releases/latest) 下载对应系统的压缩包（均附带 `checksums.txt` 校验文件）：
+
+| 平台 | 架构 | 压缩包 |
+| --- | --- | --- |
+| Windows | x86_64 (`amd64`) | `smem_2.0.0_windows_amd64.zip` |
+| Windows | ARM64 (`arm64`) | `smem_2.0.0_windows_arm64.zip` |
+| macOS | Apple Silicon (`arm64`) | `smem_2.0.0_darwin_arm64.tar.gz` |
+| macOS | Intel (`amd64`) | `smem_2.0.0_darwin_amd64.tar.gz` |
+| Linux | x86_64 (`amd64`) | `smem_2.0.0_linux_amd64.tar.gz` |
+| Linux | ARM64 (`arm64`) | `smem_2.0.0_linux_arm64.tar.gz` |
+
+解压后将 `smem`（或 `smem.exe`）放到系统 `PATH` 目录即可：
+
+```sh
+# macOS / Linux 示例（以 darwin_arm64 为例）
+curl -fsSLO https://github.com/evepupil/SMem/releases/download/v2.0.0/smem_2.0.0_darwin_arm64.tar.gz
+tar -xzf smem_2.0.0_darwin_arm64.tar.gz smem
+sudo mv smem /usr/local/bin/smem
+smem version
+```
+
+```powershell
+# Windows PowerShell 示例
+Invoke-WebRequest -Uri "https://github.com/evepupil/SMem/releases/download/v2.0.0/smem_2.0.0_windows_amd64.zip" -OutFile "smem.zip"
+Expand-Archive -Path "smem.zip" -DestinationPath "$env:LOCALAPPDATA\Programs\smem" -Force
+# 将 $env:LOCALAPPDATA\Programs\smem 加入用户 PATH 后执行 smem version
+```
+
+> 若通过浏览器下载 macOS 压缩包后首次运行遇到系统拦截提示，可先执行 `xattr -d com.apple.quarantine $(which smem)` 解除隔离属性。
+
+#### 方式二：从源码编译（需 Go 1.25+）
 
 ```sh
 git clone https://github.com/evepupil/SMem.git
@@ -349,6 +383,7 @@ smem version
 
 ```text
 SMem/
+├── .github/workflows/   # CI 多平台测试与 Release 自动打包流水线
 ├── cmd/smem/            # CLI 入口与多进程端到端测试 (e2e_test.go)
 ├── internal/
 │   ├── workspace/       # Git Repo / Worktree 指纹计算与双层作用域解析
