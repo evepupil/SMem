@@ -67,9 +67,9 @@ jobs:
             cp LICENSE README.md "${STAGE_DIR}/"
 
             if [ "${GOOS}" = "windows" ]; then
-              (cd "${STAGE_DIR}" && zip -q "../../dist/smem_${VERSION}_${GOOS}_${GOARCH}.zip" .)
+              (cd "${STAGE_DIR}" && zip -qr "../../dist/smem_${VERSION}_${GOOS}_${GOARCH}.zip" "${BIN_NAME}" LICENSE README.md)
             else
-              tar -czf "dist/smem_${VERSION}_${GOOS}_${GOARCH}.tar.gz" -C "${STAGE_DIR}" .
+              tar -czf "dist/smem_${VERSION}_${GOOS}_${GOARCH}.tar.gz" -C "${STAGE_DIR}" "${BIN_NAME}" LICENSE README.md
             fi
           done
 
