@@ -153,7 +153,10 @@ func TestWriteReadUpdateDeleteAndIndexSync(t *testing.T) {
 		t.Fatalf("unexpected update result: %+v", w2)
 	}
 
-	// Simulate 14 days passing to verify memoryAge staleness warning.
+	// Simulate 14 days passing to verify memoryAge staleness warning deterministically.
+	if err := os.Chtimes(w2.Path, now, now); err != nil {
+		t.Fatal(err)
+	}
 	store.Now = func() time.Time { return now.Add(14 * 24 * time.Hour) }
 	entries, err := store.Read(ScopeProject, []string{w1.File})
 	if err != nil {
