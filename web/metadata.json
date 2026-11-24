@@ -1,0 +1,6 @@
+{
+  "name": "SMem — 通用 AI 编程 Agent 统一记忆底座",
+  "description": "纯 Markdown、零依赖单一 Go 二进制的本地优先跨 Agent 记忆层，让 Claude Code、Codex CLI、Cursor、Gemini CLI 等工具共享同一套透明记忆。",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
